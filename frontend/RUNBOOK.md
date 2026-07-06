@@ -140,9 +140,14 @@ Confirm:
 
 When A–E are all checked, slice 1 is fully verified end-to-end (automated + manual)
 and the last outstanding debt item ("manual browser rendering checks") is closed.
-Record the date and browser here for the record:
 
-- Verified by: __________
-- Date: __________
-- Browser / OS: __________
-- A ☐  B ☐  C ☐  D ☐  E ☐
+- Verified by: user + assistant (paired)
+- Date: 2026-07-06
+- Browser / OS: Chrome / macOS
+- A ☑  B ☑  C ☑  D ☑  E ☑
+
+**Notes:** Late-joiner replay confirmed in a fresh incognito window (chart appears
+instantly from the replay buffer). The only console output during streaming was
+(a) `Unchecked runtime.lastError: The message port closed...` — emitted by a
+browser **extension**, not the app; and (b) a `favicon.ico 404`, since resolved
+by adding an inline SVG favicon. **No WebSocket or rendering errors** — §2-D passes.
