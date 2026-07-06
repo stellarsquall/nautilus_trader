@@ -1,14 +1,14 @@
-# Slice 1 — Manual Browser Verification Runbook
+# Frontend — Manual Browser Verification Runbook
 
-The automated checks (backend pytest, TypeScript build, core-isolation) are all
+The automated checks (backend pytest, TypeScript build, type-check, Vitest tests, core-isolation) are all
 green and captured in [`VERIFICATION.md`](./VERIFICATION.md). The **one remaining
 step a human must do** is eyeball the live chart in a browser — an agent can't
 watch pixels paint. This runbook is that ~3-minute smoke test.
 
-- **Branch:** `feature/7732fe1e-web-frontend-websocket-chart`
+- **Current Slice:** Slice 2 (Canvas Renderer)`
 - **What you're verifying:** 1-minute AUD/USD candles stream progressively over a
-  typed WebSocket envelope, and a late-joining browser instantly gets recent bars
-  from the replay buffer.
+  typed WebSocket envelope using a custom HTML5 Canvas renderer, with crisp rendering,
+  axes, last-price line, and no external charting dependencies.
 
 ---
 
@@ -59,25 +59,30 @@ Wait until you see the uvicorn `Application startup complete` line and the
 
 ---
 
-## 2. Primary check — progressive candles
+## 2. Slice 2 — Canvas Renderer Verification
 
 1. Open **http://localhost:8000** in a modern browser (Chrome/Firefox/Edge/Safari).
 2. Open **DevTools → Console** (Cmd-Opt-J / Ctrl-Shift-J) *before* or right as the
    page loads, so you catch any errors.
 
-Confirm each of the following (these are issue-19's acceptance criteria):
+Confirm each of the following (slice 2 canvas acceptance criteria):
 
 | # | Expected | Pass? |
 |---|----------|-------|
-| A | Chart canvas renders within ~2 seconds | ☐ |
-| B | Candlestick bars appear **progressively** — visible gap between bars (≈50 ms each) | ☐ |
-| C | At least **10 bars** visible after 5 seconds (you'll actually see far more) | ☐ |
-| D | **No** console errors mentioning `WebSocket` or rendering | ☐ |
+| A | Full-page canvas chart renders within ~2 seconds | ☐ |
+| B | Candlestick bars (green/red OHLC) appear **progressively** (≈50 ms per bar) | ☐ |
+| C | **Time axis** (bottom) shows HH:MM labels in UTC | ☐ |
+| D | **Price axis** (right) shows 5-decimal formatted prices (~0.67045) | ☐ |
+| E | **Last-price line** visible as a dashed horizontal line with price label | ☐ |
+| F | **No TradingView logo** or references visible anywhere | ☐ |
+| G | **No** console errors mentioning `WebSocket`, canvas, or rendering | ☐ |
+| H | Chart resizes smoothly when browser window is resized | ☐ |
 
 **What "good" looks like:** the chart starts empty, then candles march in left-to-right,
 several per second, filling out the ~29.5 h of AUD/USD data (hundreds of 1-min bars)
-over roughly half a minute. Bars are green/red OHLC candles.
-
+over roughly half a minute. Bars are green (#26a69a) / red (#ef5350) OHLC candles rendered
+on a crisp HTML5 canvas with clear axes and a last-price indicator.
+### Quick DevTools sanity (optional)
 ### Quick DevTools sanity (optional)
 In the **Network → WS** tab, click the `/ws` connection → **Messages**. Each frame
 should be JSON shaped like:
@@ -138,16 +143,16 @@ Confirm:
 
 ## 6. Sign-off
 
-When A–E are all checked, slice 1 is fully verified end-to-end (automated + manual)
-and the last outstanding debt item ("manual browser rendering checks") is closed.
+When all checks (A–H) and late-joiner test (E) are confirmed, slice 2 is fully verified
+end-to-end (automated + manual) with the canvas renderer implementation complete.
 
-- Verified by: user + assistant (paired)
-- Date: 2026-07-06
-- Browser / OS: Chrome / macOS
-- A ☑  B ☑  C ☑  D ☑  E ☑
+- Verified by: _____________
+- Date: _____________
+- Browser / OS: _____________
+- Canvas checks: A ☐  B ☐  C ☐  D ☐  E ☐  F ☐  G ☐  H ☐
+- Late-joiner: E ☐
 
-**Notes:** Late-joiner replay confirmed in a fresh incognito window (chart appears
-instantly from the replay buffer). The only console output during streaming was
-(a) `Unchecked runtime.lastError: The message port closed...` — emitted by a
-browser **extension**, not the app; and (b) a `favicon.ico 404`, since resolved
-by adding an inline SVG favicon. **No WebSocket or rendering errors** — §2-D passes.
+**Notes:** The canvas renderer replaces the previous TradingView lightweight-charts implementation
+with a custom HTML5 Canvas solution. Visual parity is expected: green/red candles, axes with labels,
+last-price line, auto-scroll, and crisp rendering at high DPI.
+
