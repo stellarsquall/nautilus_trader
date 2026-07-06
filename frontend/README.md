@@ -43,11 +43,11 @@ frontend/
 │   ├── replay_buffer.py # FIFO buffer for late-joining clients
 │   └── tests/           # Backend unit and integration tests
 │       └── test_websocket.py
-├── web/                 # TypeScript frontend (Vite + lightweight-charts)
+├── web/                 # TypeScript frontend (Vite + HTML5 Canvas renderer)
 │   ├── src/
 │   │   ├── main.ts      # WebSocket connection and envelope dispatch
 │   │   ├── panes/       # Pane abstraction (CandlestickPane)
-│   │   ├── renderers/   # Renderer interface and implementations
+│   │   ├── renderers/   # Renderer interface and canvas implementations
 │   │   └── types.ts     # TypeScript envelope types
 │   ├── index.html       # Chart container div
 │   ├── package.json     # Node.js dependencies
@@ -143,9 +143,9 @@ class CandlestickPane {
 
 **Benefits:**
 
-- **Pluggable renderers**: TradingView `lightweight-charts` is one implementation. Future renderers (custom WebGL for footprint, canvas for depth heatmap) implement the same interface.
+- **Pluggable renderers**: The current implementation uses a custom HTML5 Canvas renderer with layered rendering, coordinate transforms, and devicePixelRatio-crisp display. Future renderers (WebGL for footprint, custom visualizations for depth heatmap) implement the same interface.
 - **Testability**: Mock renderers enable unit testing of pane logic without heavyweight chart libraries.
-- **No leakage**: `LightweightChartsRenderer` is encapsulated in `frontend/web/src/renderers/`; the rest of the app depends only on the `Renderer` interface.
+- **No leakage**: `CanvasCandlestickRenderer` is encapsulated in `frontend/web/src/renderers/`; the rest of the app depends only on the `Renderer` interface.
 
 ### Data Flow
 
@@ -154,7 +154,7 @@ class CandlestickPane {
 3. **Main event loop broadcasts**: The `broadcast_from_queue()` coroutine consumes envelopes and sends to all connected WebSocket clients.
 4. **Browser receives and dispatches**: `main.ts` parses envelopes and routes by `type` to the appropriate pane.
 5. **Pane validates and renders**: `CandlestickPane` validates OHLC relationships and calls `renderer.update()`.
-6. **Renderer updates chart**: `LightweightChartsRenderer` converts timestamps (milliseconds → seconds) and updates the chart series.
+6. **Renderer updates chart**: `CanvasCandlestickRenderer` uses coordinate transforms to map OHLC data to canvas pixels and renders candlesticks with crisp, high-DPI rendering.
 
 ## Extensibility
 
@@ -198,7 +198,7 @@ The architecture is designed for future order-flow visualization features. Addin
 
 **No changes required**:
 - `Renderer` interface remains stable.
-- `LightweightChartsRenderer` continues to work for candlestick bars.
+- `CanvasCandlestickRenderer` continues to work for candlestick bars.
 - Pane abstraction is generic and supports any renderer.
 
 ## Dataset
