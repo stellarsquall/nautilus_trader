@@ -1,6 +1,7 @@
 """Tests for frontend/run.sh startup script."""
 
 import os
+import re
 import stat
 from pathlib import Path
 
@@ -33,8 +34,12 @@ def test_run_script_contains_required_commands():
     with open(script_path) as f:
         content = f.read()
 
-    # Check for required command sequences
-    assert "cd frontend/web" in content, "Script should navigate to frontend/web"
+    # Script must navigate into the web/ directory to build the frontend.
+    # Matched with a regex (not a literal 'cd frontend/web') so the script can
+    # resolve the path relative to itself and still work when invoked as the
+    # documented `cd frontend && ./run.sh` (a literal 'cd frontend/web' would
+    # break from inside frontend/).
+    assert re.search(r"cd\s+\S*web", content), "Script should navigate into the web/ directory"
     assert "npm install" in content, "Script should run npm install"
     assert "npm run build" in content, "Script should run npm run build"
     assert "uvicorn frontend.backend.main:app --host 0.0.0.0 --port 8000" in content, \

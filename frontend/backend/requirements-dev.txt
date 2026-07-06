@@ -1,0 +1,11 @@
+# Frontend backend DEV/TEST-only dependencies (bolt-on).
+#
+# Not needed to run the app — only to run the backend test suite:
+#
+#   uv pip install -r frontend/backend/requirements.txt
+#   uv pip install -r frontend/backend/requirements-dev.txt
+#   cd frontend/backend && pytest tests/
+#
+pytest>=8.0
+pytest-asyncio>=0.23
+httpx>=0.27          # FastAPI TestClient (used by test_websocket.py / test_main.py)

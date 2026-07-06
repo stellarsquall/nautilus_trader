@@ -1,9 +1,21 @@
 # Frontend Implementation Verification
 
 **Verification Date:** 2026-07-06
-**Verification Timestamp:** 2026-07-06T09:50:00Z
+**Original run:** 2026-07-06T09:50:00Z (fix-cycle agent)
+**Independent re-verification:** 2026-07-06T10:45:00Z — full 74-test backend suite,
+Vite build, and core-isolation re-run by hand against the final code (after the
+`run.sh`/dependency fix and the chart layout/logo fixes). Results below reflect
+the independent re-run.
 
 This document provides automated test results verifying that the NautilusTrader frontend implementation is complete, correct, and does not modify core system files.
+
+> **How to reproduce the backend suite:**
+> ```bash
+> uv sync                                              # core env (nautilus_trader)
+> uv pip install -r frontend/backend/requirements.txt      # web deps
+> uv pip install -r frontend/backend/requirements-dev.txt  # test deps
+> cd frontend/backend && pytest tests/ -v                  # -> 74 passed
+> ```
 
 ---
 
@@ -95,9 +107,9 @@ transforming...
 ✓ 12 modules transformed.
 rendering chunks...
 computing gzip size...
-dist/index.html                  0.54 kB │ gzip:  0.33 kB
-dist/assets/index-BnG34K0K.js  164.65 kB │ gzip: 52.74 kB
-✓ built in 221ms
+dist/index.html                  0.60 kB │ gzip:  0.35 kB
+dist/assets/index-oKUgmwI_.js  164.47 kB │ gzip: 52.69 kB
+✓ built in 211ms
 ```
 
 **Build Artifacts Verification:**
