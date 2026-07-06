@@ -8,7 +8,7 @@ Before running the frontend, ensure you have the following installed:
 
 - **Python 3.12+** (tested with Python 3.12-3.14)
 - **Node.js 18+** (for building the TypeScript frontend)
-- **NautilusTrader** installed locally (run `uv sync` in the project root to install dependencies)
+- **NautilusTrader** built locally (run `uv sync` in the project root to create the core `.venv`; `run.sh` adds the bolt-on web deps on top)
 
 ## Quick Start
 
@@ -19,7 +19,7 @@ cd frontend && ./run.sh
 ```
 
 This script will:
-1. Install Python dependencies (FastAPI, uvicorn, websockets, msgspec)
+1. Install the backend web dependencies (FastAPI, uvicorn, requests) into the project `.venv` from `backend/requirements.txt`
 2. Install Node.js dependencies (`npm install` in `web/`)
 3. Build the Vite frontend (`npm run build` in `web/`)
 4. Start the FastAPI backend (which serves the built static files and runs the backtest)

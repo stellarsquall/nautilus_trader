@@ -15,7 +15,7 @@ watch pixels paint. This runbook is that ~3-minute smoke test.
 ## 0. Prerequisites (one time)
 
 ```bash
-# from the repo root — installs nautilus_trader + backend deps (fastapi, uvicorn, websockets, msgspec)
+# from the repo root — builds the core nautilus_trader uv environment (.venv)
 uv sync
 
 # Node 18+ and Python 3.12+ must be on PATH
@@ -23,9 +23,16 @@ node --version   # >= 18
 python3 --version
 ```
 
-> `run.sh` does **not** run `uv sync` — it assumes the Python env is already
-> installed. If you launch and see `ModuleNotFoundError: fastapi` or
-> `nautilus_trader`, you skipped this step.
+> **Dependency split:** `uv sync` builds the **core** env (`nautilus_trader`) into
+> the repo-root `.venv`. The **bolt-on web deps** (`fastapi`, `uvicorn`, `requests`)
+> live in [`backend/requirements.txt`](./backend/requirements.txt) and are installed
+> **for you by `run.sh`** into that same `.venv` — they are deliberately kept out of
+> the core `pyproject.toml` so upstream is never modified. You do **not** install
+> them by hand.
+>
+> If you launch and see `ModuleNotFoundError: nautilus_trader`, you skipped `uv sync`
+> (or there's no `.venv`). If you see `ModuleNotFoundError: fastapi`/`requests`, you
+> ran `uvicorn` by hand instead of via `./run.sh` — use the script.
 
 ---
 
@@ -38,9 +45,11 @@ cd frontend
 
 `run.sh` will, in order:
 1. `cd web && npm install && npm run build` (produces `web/dist/`)
-2. print `Backend running at http://localhost:8000`
-3. print `Open http://localhost:8000 in your browser`
-4. start `uvicorn frontend.backend.main:app --host 0.0.0.0 --port 8000`
+2. install the backend web deps into the project `.venv` via
+   `uv pip install -r backend/requirements.txt`
+3. print `Backend running at http://localhost:8000`
+4. print `Open http://localhost:8000 in your browser`
+5. start `uv run --no-sync uvicorn frontend.backend.main:app --host 0.0.0.0 --port 8000`
 
 Wait until you see the uvicorn `Application startup complete` line and the
 `Backend running at http://localhost:8000` message from the app's lifespan.
@@ -115,7 +124,9 @@ Confirm:
 
 | Symptom | Likely cause / fix |
 |---|---|
-| `ModuleNotFoundError: fastapi` / `nautilus_trader` | Run `uv sync` from repo root first (§0). |
+| `ModuleNotFoundError: nautilus_trader` | No repo-root `.venv`, or it lacks the core — run `uv sync` from the repo root first (§0). |
+| `ModuleNotFoundError: fastapi` / `requests` | You launched `uvicorn` by hand. Use `./run.sh`, which installs `backend/requirements.txt` into the `.venv` and launches via `uv run --no-sync`. |
+| `ERROR: no .venv found ... run 'uv sync'` (from run.sh) | Run `uv sync` at the repo root, then re-run `./run.sh`. |
 | Browser shows a blank page, `404` on `/` | `web/dist/` wasn't built — check the `npm run build` output in the `run.sh` log; rerun `cd frontend/web && npm run build`. |
 | Chart container error in console (`chart-container element not found`) | Stale `dist/` — rebuild the frontend (`npm run build`) so `index.html` matches `main.ts`. |
 | Console shows `WebSocket connection ... failed` | Backend didn't start (see the `run.sh` terminal) or port 8000 is taken — free it or change the port in `run.sh` **and** it'll still be same-origin, so no client change needed. |
