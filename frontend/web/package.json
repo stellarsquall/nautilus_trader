@@ -10,9 +10,7 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": {
-    "lightweight-charts": "^4.2.3"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^20.0.0",
     "jsdom": "^24.1.3",
