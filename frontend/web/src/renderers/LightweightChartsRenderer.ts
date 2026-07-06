@@ -7,24 +7,26 @@ import type { BarPayload } from '../types';
  * lightweight-charts library for candlestick visualization.
  *
  * This renderer:
- * - Creates a chart sized to the container (width=clientWidth, height=600)
+ * - Creates a chart that auto-sizes to fill its container (via ResizeObserver)
  * - Renders candlesticks with green upColor and red downColor
  * - Converts timestamps from milliseconds to seconds for lightweight-charts API
- * - Manages window resize events for responsive charts
+ * - Disables the TradingView attribution logo
  */
 export class LightweightChartsRenderer implements Renderer {
   private chart: IChartApi;
   private candlestickSeries: ISeriesApi<'Candlestick'>;
-  private resizeHandler: () => void;
 
   constructor(container: HTMLElement) {
-    // Create chart with container width and fixed height of 600px
+    // autoSize makes the chart track the container's size (width AND height)
+    // via a ResizeObserver, so it fills the available page space and stays
+    // responsive without a manual window-resize handler.
     this.chart = createChart(container, {
-      width: container.clientWidth,
-      height: 600,
+      autoSize: true,
       layout: {
         background: { color: '#ffffff' },
         textColor: '#333333',
+        // Remove the TradingView logo/attribution from the chart surface.
+        attributionLogo: false,
       },
       timeScale: {
         timeVisible: true,
@@ -37,14 +39,6 @@ export class LightweightChartsRenderer implements Renderer {
       upColor: '#26a69a',
       downColor: '#ef5350',
     });
-
-    // Create resize handler bound to this instance
-    this.resizeHandler = () => {
-      this.chart.applyOptions({ width: container.clientWidth });
-    };
-
-    // Attach window resize listener
-    window.addEventListener('resize', this.resizeHandler);
   }
 
   /**
@@ -69,10 +63,10 @@ export class LightweightChartsRenderer implements Renderer {
   }
 
   /**
-   * Clean up resources: remove resize listener and destroy chart.
+   * Clean up resources: destroy the chart (autoSize's ResizeObserver is torn
+   * down internally by chart.remove()).
    */
   destroy(): void {
-    window.removeEventListener('resize', this.resizeHandler);
     this.chart.remove();
   }
 }
