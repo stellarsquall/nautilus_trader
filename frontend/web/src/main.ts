@@ -6,7 +6,7 @@
  */
 
 import { CandlestickPane } from './panes/CandlestickPane';
-import { LightweightChartsRenderer } from './renderers/LightweightChartsRenderer';
+import { CanvasCandlestickRenderer } from './renderers/CanvasCandlestickRenderer';
 import type { Envelope } from './types';
 
 // Get chart container from DOM
@@ -16,7 +16,7 @@ if (!container) {
 }
 
 // Instantiate renderer and pane
-const renderer = new LightweightChartsRenderer(container);
+const renderer = new CanvasCandlestickRenderer(container);
 const candlestickPane = new CandlestickPane(renderer);
 
 // Create WebSocket connection to backend
