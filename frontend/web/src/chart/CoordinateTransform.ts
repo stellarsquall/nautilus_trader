@@ -21,7 +21,7 @@ export interface PriceRange {
 }
 
 /**
- * Bar index range for visible window (X-axis bounds).
+ * Bar index range for the visible viewport (X-axis bounds).
  * Indices are relative to the bars array (0 = first bar in buffer).
  */
 export interface BarRange {
