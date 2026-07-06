@@ -37,12 +37,12 @@ class TestLifespanStartup:
     @pytest.mark.asyncio
     async def test_lifespan_gets_running_loop(self):
         """Test lifespan calls asyncio.get_running_loop() (AC1)."""
-        with patch("frontend.backend.main.create_backtest_queue") as mock_create:
+        with patch("terminal.server.main.create_backtest_queue") as mock_create:
             mock_create.return_value = (MagicMock(), asyncio.Queue())
 
-            with patch("frontend.backend.main.run_backtest_with_delay", new_callable=AsyncMock):
+            with patch("terminal.server.main.run_backtest_with_delay", new_callable=AsyncMock):
                 # Import here to apply patches
-                from frontend.backend.main import lifespan
+                from terminal.server.main import lifespan
                 from fastapi import FastAPI
 
                 app = FastAPI()
@@ -58,11 +58,11 @@ class TestLifespanStartup:
     @pytest.mark.asyncio
     async def test_lifespan_calls_create_backtest_queue_with_delay_50ms(self):
         """Test lifespan calls create_backtest_queue(loop, delay_ms=50) (AC1)."""
-        with patch("frontend.backend.main.create_backtest_queue") as mock_create:
+        with patch("terminal.server.main.create_backtest_queue") as mock_create:
             mock_create.return_value = (MagicMock(), asyncio.Queue())
 
-            with patch("frontend.backend.main.run_backtest_with_delay", new_callable=AsyncMock):
-                from frontend.backend.main import lifespan
+            with patch("terminal.server.main.run_backtest_with_delay", new_callable=AsyncMock):
+                from terminal.server.main import lifespan
                 from fastapi import FastAPI
 
                 app = FastAPI()
@@ -75,14 +75,14 @@ class TestLifespanStartup:
     @pytest.mark.asyncio
     async def test_lifespan_creates_replay_buffer_with_capacity_100(self):
         """Test lifespan creates ReplayBuffer(capacity=100) (AC2)."""
-        with patch("frontend.backend.main.create_backtest_queue") as mock_create:
+        with patch("terminal.server.main.create_backtest_queue") as mock_create:
             mock_create.return_value = (MagicMock(), asyncio.Queue())
 
-            with patch("frontend.backend.main.run_backtest_with_delay", new_callable=AsyncMock):
-                with patch("frontend.backend.main.ReplayBuffer") as mock_replay_buffer:
+            with patch("terminal.server.main.run_backtest_with_delay", new_callable=AsyncMock):
+                with patch("terminal.server.main.ReplayBuffer") as mock_replay_buffer:
                     mock_replay_buffer.return_value = MagicMock()
 
-                    from frontend.backend.main import lifespan
+                    from terminal.server.main import lifespan
                     from fastapi import FastAPI
 
                     app = FastAPI()
@@ -93,14 +93,14 @@ class TestLifespanStartup:
     @pytest.mark.asyncio
     async def test_lifespan_initializes_connection_manager(self):
         """Test lifespan initializes global ConnectionManager (AC2)."""
-        with patch("frontend.backend.main.create_backtest_queue") as mock_create:
+        with patch("terminal.server.main.create_backtest_queue") as mock_create:
             mock_create.return_value = (MagicMock(), asyncio.Queue())
 
-            with patch("frontend.backend.main.run_backtest_with_delay", new_callable=AsyncMock):
-                with patch("frontend.backend.main.ConnectionManager") as mock_manager:
+            with patch("terminal.server.main.run_backtest_with_delay", new_callable=AsyncMock):
+                with patch("terminal.server.main.ConnectionManager") as mock_manager:
                     mock_manager.return_value = MagicMock()
 
-                    from frontend.backend.main import lifespan
+                    from terminal.server.main import lifespan
                     from fastapi import FastAPI
 
                     app = FastAPI()
@@ -112,17 +112,17 @@ class TestLifespanStartup:
     @pytest.mark.asyncio
     async def test_lifespan_creates_broadcast_task(self):
         """Test lifespan creates background task for broadcast_from_queue() (AC3)."""
-        with patch("frontend.backend.main.create_backtest_queue") as mock_create:
+        with patch("terminal.server.main.create_backtest_queue") as mock_create:
             queue = asyncio.Queue()
             mock_create.return_value = (MagicMock(), queue)
 
-            with patch("frontend.backend.main.run_backtest_with_delay", new_callable=AsyncMock):
-                with patch("frontend.backend.main.ConnectionManager") as mock_manager:
+            with patch("terminal.server.main.run_backtest_with_delay", new_callable=AsyncMock):
+                with patch("terminal.server.main.ConnectionManager") as mock_manager:
                     mock_conn_mgr = MagicMock()
                     mock_conn_mgr.broadcast = AsyncMock()
                     mock_manager.return_value = mock_conn_mgr
 
-                    from frontend.backend.main import lifespan
+                    from terminal.server.main import lifespan
                     from fastapi import FastAPI
 
                     app = FastAPI()
@@ -137,16 +137,16 @@ class TestLifespanStartup:
     @pytest.mark.asyncio
     async def test_lifespan_creates_backtest_task(self):
         """Test lifespan creates background task for run_backtest_with_delay() (AC4)."""
-        with patch("frontend.backend.main.create_backtest_queue") as mock_create:
+        with patch("terminal.server.main.create_backtest_queue") as mock_create:
             mock_engine = MagicMock()
             queue = asyncio.Queue()
             mock_create.return_value = (mock_engine, queue)
 
-            with patch("frontend.backend.main.run_backtest_with_delay", new_callable=AsyncMock) as mock_run:
+            with patch("terminal.server.main.run_backtest_with_delay", new_callable=AsyncMock) as mock_run:
                 # Signal EOF
                 await queue.put(None)
 
-                from frontend.backend.main import lifespan
+                from terminal.server.main import lifespan
                 from fastapi import FastAPI
 
                 app = FastAPI()
@@ -159,12 +159,12 @@ class TestLifespanStartup:
 
     @pytest.mark.asyncio
     async def test_lifespan_prints_startup_message(self, capsys):
-        """Test lifespan prints 'Backend running at http://localhost:8000' (AC5)."""
-        with patch("frontend.backend.main.create_backtest_queue") as mock_create:
+        """Test lifespan prints 'Server running at http://localhost:8000' (AC5)."""
+        with patch("terminal.server.main.create_backtest_queue") as mock_create:
             mock_create.return_value = (MagicMock(), asyncio.Queue())
 
-            with patch("frontend.backend.main.run_backtest_with_delay", new_callable=AsyncMock):
-                from frontend.backend.main import lifespan
+            with patch("terminal.server.main.run_backtest_with_delay", new_callable=AsyncMock):
+                from terminal.server.main import lifespan
                 from fastapi import FastAPI
 
                 app = FastAPI()
@@ -174,7 +174,7 @@ class TestLifespanStartup:
 
                 # Check stdout for startup message
                 captured = capsys.readouterr()
-                assert "Backend running at http://localhost:8000" in captured.out
+                assert "Server running at http://localhost:8000" in captured.out
 
 
 class TestLifespanShutdown:
@@ -183,7 +183,7 @@ class TestLifespanShutdown:
     @pytest.mark.asyncio
     async def test_lifespan_awaits_backtest_task_on_shutdown(self):
         """Test lifespan awaits backtest_task on shutdown (AC6)."""
-        with patch("frontend.backend.main.create_backtest_queue") as mock_create:
+        with patch("terminal.server.main.create_backtest_queue") as mock_create:
             queue = asyncio.Queue()
             mock_create.return_value = (MagicMock(), queue)
 
@@ -195,8 +195,8 @@ class TestLifespanShutdown:
                 await q.put(None)
                 backtest_completed = True
 
-            with patch("frontend.backend.main.run_backtest_with_delay", new=mock_run_backtest):
-                from frontend.backend.main import lifespan
+            with patch("terminal.server.main.run_backtest_with_delay", new=mock_run_backtest):
+                from terminal.server.main import lifespan
                 from fastapi import FastAPI
 
                 app = FastAPI()
@@ -210,7 +210,7 @@ class TestLifespanShutdown:
     @pytest.mark.asyncio
     async def test_lifespan_cancels_broadcast_task_on_shutdown(self):
         """Test lifespan cancels broadcast_task on shutdown (AC6)."""
-        with patch("frontend.backend.main.create_backtest_queue") as mock_create:
+        with patch("terminal.server.main.create_backtest_queue") as mock_create:
             queue = asyncio.Queue()
             mock_create.return_value = (MagicMock(), queue)
 
@@ -220,8 +220,8 @@ class TestLifespanShutdown:
                 await asyncio.sleep(0.01)
                 await q.put(None)
 
-            with patch("frontend.backend.main.run_backtest_with_delay", new=mock_run_backtest):
-                with patch("frontend.backend.main.ConnectionManager") as mock_manager:
+            with patch("terminal.server.main.run_backtest_with_delay", new=mock_run_backtest):
+                with patch("terminal.server.main.ConnectionManager") as mock_manager:
                     mock_conn_mgr = MagicMock()
 
                     async def mock_broadcast(envelope):
@@ -235,7 +235,7 @@ class TestLifespanShutdown:
                     mock_conn_mgr.broadcast = mock_broadcast
                     mock_manager.return_value = mock_conn_mgr
 
-                    from frontend.backend.main import lifespan
+                    from terminal.server.main import lifespan
                     from fastapi import FastAPI
 
                     app = FastAPI()
@@ -255,11 +255,11 @@ class TestBroadcastFromQueueLogic:
     @pytest.mark.asyncio
     async def test_broadcast_loop_breaks_on_none(self):
         """Test broadcast_from_queue() breaks loop on None (EOF signal)."""
-        with patch("frontend.backend.main.create_backtest_queue") as mock_create:
+        with patch("terminal.server.main.create_backtest_queue") as mock_create:
             queue = asyncio.Queue()
             mock_create.return_value = (MagicMock(), queue)
 
-            with patch("frontend.backend.main.ConnectionManager") as mock_manager:
+            with patch("terminal.server.main.ConnectionManager") as mock_manager:
                 mock_conn_mgr = MagicMock()
                 call_count = 0
 
@@ -279,8 +279,8 @@ class TestBroadcastFromQueueLogic:
                     # Don't put anything, queue already populated
                     pass
 
-                with patch("frontend.backend.main.run_backtest_with_delay", new=mock_run_backtest):
-                    from frontend.backend.main import lifespan
+                with patch("terminal.server.main.run_backtest_with_delay", new=mock_run_backtest):
+                    from terminal.server.main import lifespan
                     from fastapi import FastAPI
 
                     app = FastAPI()
@@ -295,11 +295,11 @@ class TestBroadcastFromQueueLogic:
     @pytest.mark.asyncio
     async def test_broadcast_calls_manager_broadcast(self):
         """Test broadcast_from_queue() calls manager.broadcast() for each envelope (AC3)."""
-        with patch("frontend.backend.main.create_backtest_queue") as mock_create:
+        with patch("terminal.server.main.create_backtest_queue") as mock_create:
             queue = asyncio.Queue()
             mock_create.return_value = (MagicMock(), queue)
 
-            with patch("frontend.backend.main.ConnectionManager") as mock_manager:
+            with patch("terminal.server.main.ConnectionManager") as mock_manager:
                 mock_conn_mgr = MagicMock()
                 mock_conn_mgr.broadcast = AsyncMock()
                 mock_manager.return_value = mock_conn_mgr
@@ -314,8 +314,8 @@ class TestBroadcastFromQueueLogic:
                 async def mock_run_backtest(engine, q):
                     pass
 
-                with patch("frontend.backend.main.run_backtest_with_delay", new=mock_run_backtest):
-                    from frontend.backend.main import lifespan
+                with patch("terminal.server.main.run_backtest_with_delay", new=mock_run_backtest):
+                    from terminal.server.main import lifespan
                     from fastapi import FastAPI
 
                     app = FastAPI()
@@ -332,7 +332,7 @@ class TestFastAPIApp:
 
     def test_app_has_websocket_route(self):
         """Test FastAPI app has WebSocket route /ws (AC7)."""
-        from frontend.backend.main import app
+        from terminal.server.main import app
 
         # Find WebSocket routes
         ws_routes = [route for route in app.routes if hasattr(route, "path") and route.path == "/ws"]
@@ -344,7 +344,7 @@ class TestFastAPIApp:
 
     def test_app_has_static_files_mount_or_skip(self):
         """Test FastAPI app mounts StaticFiles at / (AC8) or skips if dist not built."""
-        from frontend.backend.main import app
+        from terminal.server.main import app
 
         # Check if static files are mounted (may not be if dist/ doesn't exist)
         static_routes = [route for route in app.routes if hasattr(route, "path") and route.path == "/"]

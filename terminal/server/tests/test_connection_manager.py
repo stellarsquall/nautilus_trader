@@ -4,9 +4,9 @@ import pytest
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 
-from frontend.backend.replay_buffer import ReplayBuffer
-from frontend.backend.websocket import ConnectionManager
-from frontend.backend.websocket import websocket_endpoint
+from terminal.server.replay_buffer import ReplayBuffer
+from terminal.server.websocket import ConnectionManager
+from terminal.server.websocket import websocket_endpoint
 
 
 def create_test_envelope(seq: int, ts_event: int = 1580395680000) -> dict:
@@ -358,7 +358,7 @@ class TestWebSocketEndpoint:
     @pytest.mark.asyncio
     async def test_endpoint_calls_manager_connect(self):
         """Test websocket_endpoint() calls manager.connect() (AC6)."""
-        from frontend.backend import websocket as ws_module
+        from terminal.server import websocket as ws_module
 
         replay_buffer = ReplayBuffer(capacity=100)
         manager = ConnectionManager(replay_buffer=replay_buffer)
@@ -378,7 +378,7 @@ class TestWebSocketEndpoint:
     @pytest.mark.asyncio
     async def test_endpoint_calls_manager_disconnect_on_exception(self):
         """Test websocket_endpoint() calls manager.disconnect() on WebSocketDisconnect (AC6)."""
-        from frontend.backend import websocket as ws_module
+        from terminal.server import websocket as ws_module
 
         replay_buffer = ReplayBuffer(capacity=100)
         manager = ConnectionManager(replay_buffer=replay_buffer)
@@ -399,7 +399,7 @@ class TestWebSocketEndpoint:
     @pytest.mark.asyncio
     async def test_endpoint_receive_loop(self):
         """Test websocket_endpoint() enters receive loop."""
-        from frontend.backend import websocket as ws_module
+        from terminal.server import websocket as ws_module
 
         replay_buffer = ReplayBuffer(capacity=100)
         manager = ConnectionManager(replay_buffer=replay_buffer)

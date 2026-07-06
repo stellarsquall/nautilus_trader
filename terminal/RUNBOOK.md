@@ -1,6 +1,6 @@
-# Frontend — Manual Browser Verification Runbook
+# Terminal — Manual Browser Verification Runbook
 
-The automated checks (backend pytest, TypeScript build, type-check, Vitest tests, core-isolation) are all
+The automated checks (server pytest, TypeScript build, type-check, Vitest tests, core-isolation) are all
 green and captured in [`VERIFICATION.md`](./VERIFICATION.md). The **one remaining
 step a human must do** is eyeball the live chart in a browser — an agent can't
 watch pixels paint. This runbook is that ~3-minute smoke test.
@@ -25,7 +25,7 @@ python3 --version
 
 > **Dependency split:** `uv sync` builds the **core** env (`nautilus_trader`) into
 > the repo-root `.venv`. The **bolt-on web deps** (`fastapi`, `uvicorn`, `requests`)
-> live in [`backend/requirements.txt`](./backend/requirements.txt) and are installed
+> live in [`server/requirements.txt`](./server/requirements.txt) and are installed
 > **for you by `run.sh`** into that same `.venv` — they are deliberately kept out of
 > the core `pyproject.toml` so upstream is never modified. You do **not** install
 > them by hand.
@@ -39,22 +39,22 @@ python3 --version
 ## 1. Launch
 
 ```bash
-cd frontend
+cd terminal
 ./run.sh
 ```
 
 `run.sh` will, in order:
 1. `cd web && npm install && npm run build` (produces `web/dist/`)
-2. install the backend web deps into the project `.venv` via
-   `uv pip install -r backend/requirements.txt`
-3. print `Backend running at http://localhost:8000`
+2. install the server web deps into the project `.venv` via
+   `uv pip install -r server/requirements.txt`
+3. print `Server running at http://localhost:8000`
 4. print `Open http://localhost:8000 in your browser`
-5. start `uv run --no-sync uvicorn frontend.backend.main:app --host 0.0.0.0 --port 8000`
+5. start `uv run --no-sync uvicorn terminal.server.main:app --host 0.0.0.0 --port 8000`
 
 Wait until you see the uvicorn `Application startup complete` line and the
-`Backend running at http://localhost:8000` message from the app's lifespan.
+`Server running at http://localhost:8000` message from the app's lifespan.
 
-> Run it from the `frontend/` directory (the `cd` paths inside the script are
+> Run it from the `terminal/` directory (the `cd` paths inside the script are
 > relative to that). Leave this terminal running — it's the server.
 
 ---
@@ -130,14 +130,14 @@ Confirm:
 | Symptom | Likely cause / fix |
 |---|---|
 | `ModuleNotFoundError: nautilus_trader` | No repo-root `.venv`, or it lacks the core — run `uv sync` from the repo root first (§0). |
-| `ModuleNotFoundError: fastapi` / `requests` | You launched `uvicorn` by hand. Use `./run.sh`, which installs `backend/requirements.txt` into the `.venv` and launches via `uv run --no-sync`. |
+| `ModuleNotFoundError: fastapi` / `requests` | You launched `uvicorn` by hand. Use `./run.sh`, which installs `server/requirements.txt` into the `.venv` and launches via `uv run --no-sync`. |
 | `ERROR: no .venv found ... run 'uv sync'` (from run.sh) | Run `uv sync` at the repo root, then re-run `./run.sh`. |
-| Browser shows a blank page, `404` on `/` | `web/dist/` wasn't built — check the `npm run build` output in the `run.sh` log; rerun `cd frontend/web && npm run build`. |
-| Chart container error in console (`chart-container element not found`) | Stale `dist/` — rebuild the frontend (`npm run build`) so `index.html` matches `main.ts`. |
-| Console shows `WebSocket connection ... failed` | Backend didn't start (see the `run.sh` terminal) or port 8000 is taken — free it or change the port in `run.sh` **and** it'll still be same-origin, so no client change needed. |
+| Browser shows a blank page, `404` on `/` | `web/dist/` wasn't built — check the `npm run build` output in the `run.sh` log; rerun `cd terminal/client && npm run build`. |
+| Chart container error in console (`chart-container element not found`) | Stale `dist/` — rebuild the terminal (`npm run build`) so `index.html` matches `main.ts`. |
+| Console shows `WebSocket connection ... failed` | Server didn't start (see the `run.sh` terminal) or port 8000 is taken — free it or change the port in `run.sh` **and** it'll still be same-origin, so no client change needed. |
 | Chart renders but **no** bars ever appear | Backtest produced no bars — confirm the tick dataset is present at `tests/test_data/truefx/audusd-ticks.csv`; check the server log for a backtest error. |
 | Bars appear all at once with no delay | `delay_ms` in `create_backtest_queue` was set to 0; default is 50 ms. |
-| Port 8000 already in use | `lsof -ti:8000 | xargs kill`, or edit the `--port` in `frontend/run.sh`. |
+| Port 8000 already in use | `lsof -ti:8000 | xargs kill`, or edit the `--port` in `terminal/run.sh`. |
 
 ---
 
@@ -150,7 +150,7 @@ end-to-end (automated + manual) with the canvas renderer implementation complete
 - Date: 2026-07-06
 - Browser / OS: Chrome / macOS
 - Canvas checks: A ☑  B ☑  C ☑  D ☑  E ☑  F ☑  G ☑  H ☑ (ResizeObserver auto-size)
-- Late-joiner: E ☑ (mechanism unchanged from slice 1; backend/protocol untouched)
+- Late-joiner: E ☑ (mechanism unchanged from slice 1; server/protocol untouched)
 
 **Notes:** The canvas renderer replaces the previous TradingView lightweight-charts implementation
 with a custom HTML5 Canvas solution. Visual parity confirmed from a live run: green/red candles with

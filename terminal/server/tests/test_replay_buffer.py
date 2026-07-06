@@ -1,7 +1,7 @@
 """Unit tests for ReplayBuffer capacity enforcement, FIFO eviction, and chronological ordering."""
 
 import pytest
-from frontend.backend.replay_buffer import ReplayBuffer
+from terminal.server.replay_buffer import ReplayBuffer
 
 
 def create_test_envelope(seq: int, ts_event: int = 1580395680000) -> dict:

@@ -18,7 +18,7 @@
 from fastapi import WebSocket
 from fastapi import WebSocketDisconnect
 
-from frontend.backend.replay_buffer import ReplayBuffer
+from terminal.server.replay_buffer import ReplayBuffer
 
 
 class ConnectionManager:

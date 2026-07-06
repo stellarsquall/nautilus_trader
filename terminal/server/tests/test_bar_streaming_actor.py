@@ -56,8 +56,8 @@ class MockActorConfigBase(msgspec.Struct, kw_only=True, frozen=True):
 sys.modules["nautilus_trader.common.actor"].Actor = MockActorBase
 sys.modules["nautilus_trader.config"].ActorConfig = MockActorConfigBase
 
-from frontend.backend.bar_streaming_actor import BarStreamingActor
-from frontend.backend.bar_streaming_actor import BarStreamingActorConfig
+from terminal.server.bar_streaming_actor import BarStreamingActor
+from terminal.server.bar_streaming_actor import BarStreamingActorConfig
 
 
 # Mock Bar class for testing (mimics nautilus_trader.model.data.Bar structure)

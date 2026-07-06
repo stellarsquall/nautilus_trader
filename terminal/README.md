@@ -1,49 +1,49 @@
-# NautilusTrader Frontend
+# NautilusTrader Terminal
 
-A WebSocket-based candlestick chart frontend for NautilusTrader backtests, architected to support future order-flow visualizations without modifying existing code or message schemas.
+A WebSocket-based candlestick chart terminal for NautilusTrader backtests, architected to support future order-flow visualizations without modifying existing code or message schemas.
 
 ## Prerequisites
 
-Before running the frontend, ensure you have the following installed:
+Before running the terminal, ensure you have the following installed:
 
 - **Python 3.12+** (tested with Python 3.12-3.14)
-- **Node.js 18+** (for building the TypeScript frontend)
+- **Node.js 18+** (for building the TypeScript client)
 - **NautilusTrader** built locally (run `uv sync` in the project root to create the core `.venv`; `run.sh` adds the bolt-on web deps on top)
 
 ## Quick Start
 
-Launch the complete frontend stack with a single command:
+Launch the complete terminal stack with a single command:
 
 ```bash
-cd frontend && ./run.sh
+cd terminal && ./run.sh
 ```
 
 This script will:
-1. Install the backend web dependencies (FastAPI, uvicorn, requests) into the project `.venv` from `backend/requirements.txt`
-2. Install Node.js dependencies (`npm install` in `web/`)
-3. Build the Vite frontend (`npm run build` in `web/`)
-4. Start the FastAPI backend (which serves the built static files and runs the backtest)
+1. Install the server web dependencies (FastAPI, uvicorn, requests) into the project `.venv` from `server/requirements.txt`
+2. Install Node.js dependencies (`npm install` in `client/`)
+3. Build the Vite client (`npm run build` in `client/`)
+4. Start the FastAPI server (which serves the built static files and runs the backtest)
 5. Print the URL to open in your browser: `http://localhost:8000`
 
 Open the URL in a modern browser (Chrome, Firefox, Edge, or Safari) to view the live-updating candlestick chart.
 
 ## Architecture
 
-This frontend demonstrates a minimal working slice that establishes the architectural foundation for a future order-flow trading platform. The design enables future enhancements (footprint/Numbers Bars, CVD pane, depth heatmap, trade streaming) without breaking existing code.
+This terminal demonstrates a minimal working slice that establishes the architectural foundation for a future order-flow trading platform. The design enables future enhancements (footprint/Numbers Bars, CVD pane, depth heatmap, trade streaming) without breaking existing code.
 
 ### Directory Structure
 
 ```
-frontend/
-├── backend/              # Python backend (FastAPI + NautilusTrader)
+terminal/
+├── server/              # Python server (FastAPI + NautilusTrader)
 │   ├── main.py          # FastAPI app with lifespan, /ws endpoint
 │   ├── backtest.py      # Backtest engine setup and queue creation
 │   ├── bar_streaming_actor.py  # Actor that forwards bars to asyncio.Queue
 │   ├── websocket.py     # ConnectionManager and broadcast logic
 │   ├── replay_buffer.py # FIFO buffer for late-joining clients
-│   └── tests/           # Backend unit and integration tests
+│   └── tests/           # Server unit and integration tests
 │       └── test_websocket.py
-├── web/                 # TypeScript frontend (Vite + HTML5 Canvas renderer)
+├── client/                 # TypeScript client (Vite + HTML5 Canvas renderer)
 │   ├── src/
 │   │   ├── main.ts      # WebSocket connection and envelope dispatch
 │   │   ├── panes/       # Pane abstraction (CandlestickPane)
@@ -120,10 +120,10 @@ The architecture bridges NautilusTrader's synchronous `BacktestEngine` with Fast
 
 ### Pane/Renderer Abstraction
 
-The frontend isolates rendering libraries through a clean interface, enabling future custom renderers without modifying the pane abstraction:
+The terminal isolates rendering libraries through a clean interface, enabling future custom renderers without modifying the pane abstraction:
 
 ```typescript
-// Renderer interface (frontend/web/src/renderers/Renderer.ts)
+// Renderer interface (terminal/client/src/renderers/Renderer.ts)
 export interface Renderer {
   update(data: unknown): void;
   destroy(): void;
@@ -145,7 +145,7 @@ class CandlestickPane {
 
 - **Pluggable renderers**: The current implementation uses a custom HTML5 Canvas renderer with layered rendering, coordinate transforms, and devicePixelRatio-crisp display. Future renderers (WebGL for footprint, custom visualizations for depth heatmap) implement the same interface.
 - **Testability**: Mock renderers enable unit testing of pane logic without heavyweight chart libraries.
-- **No leakage**: `CanvasCandlestickRenderer` is encapsulated in `frontend/web/src/renderers/`; the rest of the app depends only on the `Renderer` interface.
+- **No leakage**: `CanvasCandlestickRenderer` is encapsulated in `terminal/client/src/renderers/`; the rest of the app depends only on the `Renderer` interface.
 
 ### Data Flow
 
@@ -162,14 +162,14 @@ The architecture is designed for future order-flow visualization features. Addin
 
 ### Adding New Message Types
 
-**Scenario**: Stream trade ticks to the frontend.
+**Scenario**: Stream trade ticks to the terminal.
 
-**Backend changes**:
+**Server changes**:
 1. Add `type="trade"` to the actor's type registry.
 2. Subscribe to trade ticks in the backtest setup.
 3. Implement `on_trade()` callback that creates trade envelopes.
 
-**Frontend changes**:
+**Client changes**:
 1. Add `TradePayload` interface to `types.ts`.
 2. Create a `TradePane` class.
 3. Add a `case "trade":` handler in `main.ts` dispatch logic.
@@ -177,7 +177,7 @@ The architecture is designed for future order-flow visualization features. Addin
 **No changes required**:
 - Existing `type="bar"` handling remains untouched.
 - WebSocket infrastructure (envelope parsing, sequence validation) is reused.
-- Backend `ConnectionManager` and `ReplayBuffer` work unchanged.
+- Server `ConnectionManager` and `ReplayBuffer` work unchanged.
 
 **Future message types** (reserved but not implemented):
 - `type="trade"`: Individual trade ticks with price, size, aggressor side.
@@ -211,7 +211,7 @@ The default backtest uses the bundled NautilusTrader dataset:
 - **Time range**: 2020-01-30 to 2020-01-31
 - **Aggregation**: 1-minute bars via `BarType.from_str("AUD/USD.SIM-1-MINUTE-MID-INTERNAL")`
 
-The `INTERNAL` aggregation source is critical for bars-from-ticks. See `backend/backtest.py` for the complete setup.
+The `INTERNAL` aggregation source is critical for bars-from-ticks. See `server/backtest.py` for the complete setup.
 
 ## Replay Buffer
 
@@ -224,12 +224,12 @@ Late-joining WebSocket clients receive the last 100 bars immediately upon connec
 
 ## Testing
 
-### Backend Tests
+### Server Tests
 
-Run backend tests with pytest:
+Run server tests with pytest:
 
 ```bash
-cd frontend/backend
+cd terminal/server
 pytest tests/test_websocket.py -v
 ```
 
@@ -240,12 +240,12 @@ Tests validate:
 - Sequence number monotonicity
 - Timestamp conversion (nanoseconds → milliseconds)
 
-### Frontend Build
+### Client Build
 
-Build the TypeScript frontend:
+Build the TypeScript client:
 
 ```bash
-cd frontend/web
+cd terminal/client
 npm install
 npm run build
 ```
@@ -254,24 +254,24 @@ The build creates a `dist/` directory with optimized static assets served by Fas
 
 ## Development
 
-### Modifying the Backend
+### Modifying the Server
 
-Edit Python files in `frontend/backend/`. The backend runs with FastAPI's auto-reload enabled during development (via `uvicorn --reload`).
+Edit Python files in `terminal/server/`. The server runs with FastAPI's auto-reload enabled during development (via `uvicorn --reload`).
 
-### Modifying the Frontend
+### Modifying the Client
 
-Edit TypeScript files in `frontend/web/src/`. For live development:
+Edit TypeScript files in `terminal/client/src/`. For live development:
 
 ```bash
-cd frontend/web
+cd terminal/client
 npm run dev
 ```
 
-This starts Vite's dev server with hot module replacement. Note: you must run the backend separately for WebSocket connectivity.
+This starts Vite's dev server with hot module replacement. Note: you must run the server separately for WebSocket connectivity.
 
 ## Browser Compatibility
 
-The frontend targets modern evergreen browsers:
+The terminal targets modern evergreen browsers:
 - Chrome/Edge (latest 2 versions)
 - Firefox (latest 2 versions)
 - Safari (latest 2 versions)
@@ -280,7 +280,7 @@ No IE11 or legacy browser support.
 
 ## License
 
-This frontend follows the NautilusTrader project license. See the main repository README for details.
+This terminal follows the NautilusTrader project license. See the main repository README for details.
 
 ## Future Work
 
@@ -297,19 +297,19 @@ Planned enhancements (not in current slice):
 ### No bars appear in the chart
 
 - Check the browser console for WebSocket errors.
-- Verify the backend is running at `http://localhost:8000`.
+- Verify the server is running at `http://localhost:8000`.
 - Ensure the dataset exists: `tests/test_data/truefx/audusd-ticks.csv`.
 
-### "Queue not injected" error in backend logs
+### "Queue not injected" error in server logs
 
 - This indicates the `BarStreamingActor` did not receive the queue before `engine.run()` was called.
 - Verify `actor.set_queue(queue, loop)` is called in `backtest.py` before `engine.run()`.
 
 ### WebSocket connection refused
 
-- Ensure the backend is running (`./run.sh` or `uvicorn main:app`).
+- Ensure the server is running (`./run.sh` or `uvicorn main:app`).
 - Check that port 8000 is not blocked by a firewall.
-- Verify the frontend WebSocket URL matches the backend host (`ws://localhost:8000/ws`).
+- Verify the terminal WebSocket URL matches the server host (`ws://localhost:8000/ws`).
 
 ---
 

@@ -28,8 +28,8 @@ from nautilus_trader.persistence.wranglers import QuoteTickDataWrangler
 from nautilus_trader.test_kit.providers import TestDataProvider
 from nautilus_trader.test_kit.providers import TestInstrumentProvider
 
-from frontend.backend.bar_streaming_actor import BarStreamingActor
-from frontend.backend.bar_streaming_actor import BarStreamingActorConfig
+from terminal.server.bar_streaming_actor import BarStreamingActor
+from terminal.server.bar_streaming_actor import BarStreamingActorConfig
 
 
 def create_backtest_queue(

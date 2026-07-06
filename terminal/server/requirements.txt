@@ -1,10 +1,10 @@
 # Frontend backend Python dependencies (bolt-on).
 #
 # These are installed INTO the project's uv-managed `.venv` (which already
-# contains a built `nautilus_trader`) by `frontend/run.sh`. They are kept out
+# contains a built `nautilus_trader`) by `terminal/run.sh`. They are kept out
 # of the core `pyproject.toml` so the upstream project is never modified.
 #
-#   uv pip install -r frontend/backend/requirements.txt
+#   uv pip install -r terminal/server/requirements.txt
 #
 fastapi>=0.110
 uvicorn[standard]>=0.29

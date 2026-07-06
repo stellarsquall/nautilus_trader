@@ -69,8 +69,8 @@ class MockActorConfigBase(msgspec.Struct, kw_only=True, frozen=True):
 sys.modules["nautilus_trader.common.actor"].Actor = MockActorBase
 sys.modules["nautilus_trader.config"].ActorConfig = MockActorConfigBase
 
-from frontend.backend.backtest import create_backtest_queue
-from frontend.backend.backtest import run_backtest_with_delay
+from terminal.server.backtest import create_backtest_queue
+from terminal.server.backtest import run_backtest_with_delay
 
 
 @pytest.fixture
@@ -104,12 +104,12 @@ def mock_queue():
 class TestCreateBacktestQueue:
     """Unit tests for create_backtest_queue function."""
 
-    @patch("frontend.backend.backtest.BacktestEngine")
-    @patch("frontend.backend.backtest.TestInstrumentProvider")
-    @patch("frontend.backend.backtest.TestDataProvider")
-    @patch("frontend.backend.backtest.QuoteTickDataWrangler")
-    @patch("frontend.backend.backtest.BarStreamingActor")
-    @patch("frontend.backend.backtest.asyncio.Queue")
+    @patch("terminal.server.backtest.BacktestEngine")
+    @patch("terminal.server.backtest.TestInstrumentProvider")
+    @patch("terminal.server.backtest.TestDataProvider")
+    @patch("terminal.server.backtest.QuoteTickDataWrangler")
+    @patch("terminal.server.backtest.BarStreamingActor")
+    @patch("terminal.server.backtest.asyncio.Queue")
     def test_returns_engine_and_queue(
         self,
         mock_queue_class,
@@ -148,12 +148,12 @@ class TestCreateBacktestQueue:
         assert engine is mock_engine
         assert queue is mock_queue
 
-    @patch("frontend.backend.backtest.BacktestEngine")
-    @patch("frontend.backend.backtest.TestInstrumentProvider")
-    @patch("frontend.backend.backtest.TestDataProvider")
-    @patch("frontend.backend.backtest.QuoteTickDataWrangler")
-    @patch("frontend.backend.backtest.BarStreamingActor")
-    @patch("frontend.backend.backtest.asyncio.Queue")
+    @patch("terminal.server.backtest.BacktestEngine")
+    @patch("terminal.server.backtest.TestInstrumentProvider")
+    @patch("terminal.server.backtest.TestDataProvider")
+    @patch("terminal.server.backtest.QuoteTickDataWrangler")
+    @patch("terminal.server.backtest.BarStreamingActor")
+    @patch("terminal.server.backtest.asyncio.Queue")
     def test_creates_engine_with_correct_trader_id(
         self,
         mock_queue_class,
@@ -194,12 +194,12 @@ class TestCreateBacktestQueue:
         assert "config" in call_args.kwargs
         # Config is mocked, so just verify it was passed
 
-    @patch("frontend.backend.backtest.BacktestEngine")
-    @patch("frontend.backend.backtest.TestInstrumentProvider")
-    @patch("frontend.backend.backtest.TestDataProvider")
-    @patch("frontend.backend.backtest.QuoteTickDataWrangler")
-    @patch("frontend.backend.backtest.BarStreamingActor")
-    @patch("frontend.backend.backtest.asyncio.Queue")
+    @patch("terminal.server.backtest.BacktestEngine")
+    @patch("terminal.server.backtest.TestInstrumentProvider")
+    @patch("terminal.server.backtest.TestDataProvider")
+    @patch("terminal.server.backtest.QuoteTickDataWrangler")
+    @patch("terminal.server.backtest.BarStreamingActor")
+    @patch("terminal.server.backtest.asyncio.Queue")
     def test_adds_sim_venue_with_correct_config(
         self,
         mock_queue_class,
@@ -246,12 +246,12 @@ class TestCreateBacktestQueue:
         assert "starting_balances" in call_kwargs
         assert len(call_kwargs["starting_balances"]) == 1
 
-    @patch("frontend.backend.backtest.BacktestEngine")
-    @patch("frontend.backend.backtest.TestInstrumentProvider")
-    @patch("frontend.backend.backtest.TestDataProvider")
-    @patch("frontend.backend.backtest.QuoteTickDataWrangler")
-    @patch("frontend.backend.backtest.BarStreamingActor")
-    @patch("frontend.backend.backtest.asyncio.Queue")
+    @patch("terminal.server.backtest.BacktestEngine")
+    @patch("terminal.server.backtest.TestInstrumentProvider")
+    @patch("terminal.server.backtest.TestDataProvider")
+    @patch("terminal.server.backtest.QuoteTickDataWrangler")
+    @patch("terminal.server.backtest.BarStreamingActor")
+    @patch("terminal.server.backtest.asyncio.Queue")
     def test_adds_audusd_instrument(
         self,
         mock_queue_class,
@@ -295,12 +295,12 @@ class TestCreateBacktestQueue:
         # Assert instrument was added to engine
         mock_engine.add_instrument.assert_called_once_with(mock_instrument)
 
-    @patch("frontend.backend.backtest.BacktestEngine")
-    @patch("frontend.backend.backtest.TestInstrumentProvider")
-    @patch("frontend.backend.backtest.TestDataProvider")
-    @patch("frontend.backend.backtest.QuoteTickDataWrangler")
-    @patch("frontend.backend.backtest.BarStreamingActor")
-    @patch("frontend.backend.backtest.asyncio.Queue")
+    @patch("terminal.server.backtest.BacktestEngine")
+    @patch("terminal.server.backtest.TestInstrumentProvider")
+    @patch("terminal.server.backtest.TestDataProvider")
+    @patch("terminal.server.backtest.QuoteTickDataWrangler")
+    @patch("terminal.server.backtest.BarStreamingActor")
+    @patch("terminal.server.backtest.asyncio.Queue")
     def test_loads_quote_ticks_from_csv(
         self,
         mock_queue_class,
@@ -347,12 +347,12 @@ class TestCreateBacktestQueue:
         # Assert processed ticks are added to engine
         mock_engine.add_data.assert_called_once_with(mock_ticks)
 
-    @patch("frontend.backend.backtest.BacktestEngine")
-    @patch("frontend.backend.backtest.TestInstrumentProvider")
-    @patch("frontend.backend.backtest.TestDataProvider")
-    @patch("frontend.backend.backtest.QuoteTickDataWrangler")
-    @patch("frontend.backend.backtest.BarStreamingActor")
-    @patch("frontend.backend.backtest.asyncio.Queue")
+    @patch("terminal.server.backtest.BacktestEngine")
+    @patch("terminal.server.backtest.TestInstrumentProvider")
+    @patch("terminal.server.backtest.TestDataProvider")
+    @patch("terminal.server.backtest.QuoteTickDataWrangler")
+    @patch("terminal.server.backtest.BarStreamingActor")
+    @patch("terminal.server.backtest.asyncio.Queue")
     def test_creates_actor_and_injects_queue(
         self,
         mock_queue_class,
@@ -395,12 +395,12 @@ class TestCreateBacktestQueue:
         # Assert queue was injected into actor
         mock_actor.set_queue.assert_called_once_with(mock_queue, mock_event_loop)
 
-    @patch("frontend.backend.backtest.BacktestEngine")
-    @patch("frontend.backend.backtest.TestInstrumentProvider")
-    @patch("frontend.backend.backtest.TestDataProvider")
-    @patch("frontend.backend.backtest.QuoteTickDataWrangler")
-    @patch("frontend.backend.backtest.BarStreamingActor")
-    @patch("frontend.backend.backtest.asyncio.Queue")
+    @patch("terminal.server.backtest.BacktestEngine")
+    @patch("terminal.server.backtest.TestInstrumentProvider")
+    @patch("terminal.server.backtest.TestDataProvider")
+    @patch("terminal.server.backtest.QuoteTickDataWrangler")
+    @patch("terminal.server.backtest.BarStreamingActor")
+    @patch("terminal.server.backtest.asyncio.Queue")
     def test_actor_added_to_engine(
         self,
         mock_queue_class,
@@ -438,13 +438,13 @@ class TestCreateBacktestQueue:
         # Assert actor was added to engine
         mock_engine.add_actor.assert_called_once_with(mock_actor)
 
-    @patch("frontend.backend.backtest.BacktestEngine")
-    @patch("frontend.backend.backtest.TestInstrumentProvider")
-    @patch("frontend.backend.backtest.TestDataProvider")
-    @patch("frontend.backend.backtest.QuoteTickDataWrangler")
-    @patch("frontend.backend.backtest.BarStreamingActor")
-    @patch("frontend.backend.backtest.asyncio.Queue")
-    @patch("frontend.backend.backtest.BarType")
+    @patch("terminal.server.backtest.BacktestEngine")
+    @patch("terminal.server.backtest.TestInstrumentProvider")
+    @patch("terminal.server.backtest.TestDataProvider")
+    @patch("terminal.server.backtest.QuoteTickDataWrangler")
+    @patch("terminal.server.backtest.BarStreamingActor")
+    @patch("terminal.server.backtest.asyncio.Queue")
+    @patch("terminal.server.backtest.BarType")
     def test_subscribes_to_correct_bar_type(
         self,
         mock_bar_type_class,
@@ -502,7 +502,7 @@ class TestRunBacktestWithDelay:
         queue = asyncio.Queue()
 
         # Mock the event loop to capture run_in_executor call
-        with patch("frontend.backend.backtest.asyncio.get_running_loop") as mock_get_loop:
+        with patch("terminal.server.backtest.asyncio.get_running_loop") as mock_get_loop:
             mock_loop = AsyncMock()
             mock_get_loop.return_value = mock_loop
 
@@ -525,7 +525,7 @@ class TestRunBacktestWithDelay:
         queue = asyncio.Queue()
 
         # Mock the event loop
-        with patch("frontend.backend.backtest.asyncio.get_running_loop") as mock_get_loop:
+        with patch("terminal.server.backtest.asyncio.get_running_loop") as mock_get_loop:
             mock_loop = AsyncMock()
             mock_get_loop.return_value = mock_loop
 
@@ -546,7 +546,7 @@ class TestRunBacktestWithDelay:
         queue = asyncio.Queue()
 
         # Mock the event loop
-        with patch("frontend.backend.backtest.asyncio.get_running_loop") as mock_get_loop:
+        with patch("terminal.server.backtest.asyncio.get_running_loop") as mock_get_loop:
             mock_loop = AsyncMock()
             mock_get_loop.return_value = mock_loop
 

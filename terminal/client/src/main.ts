@@ -1,5 +1,5 @@
 /**
- * Main entry point for NautilusTrader frontend.
+ * Main entry point for the NautilusTrader terminal (browser client).
  *
  * Establishes WebSocket connection to backend, instantiates chart renderer
  * and pane, and routes incoming messages to appropriate handlers.

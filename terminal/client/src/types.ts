@@ -1,8 +1,8 @@
 /**
  * WebSocket envelope and payload type definitions.
  *
- * Defines the typed contract for all WebSocket messages between the backend
- * and frontend. The envelope protocol is versioned and extensible to support
+ * Defines the typed contract for all WebSocket messages between the server
+ * and client. The envelope protocol is versioned and extensible to support
  * future message types (trade, book_delta, footprint, cvd, depth_heatmap)
  * without breaking existing handlers.
  */
@@ -11,7 +11,7 @@
  * WebSocket envelope structure (v1).
  *
  * Every WebSocket frame conforms to this structure, enabling type-safe
- * message parsing and dispatch in the frontend.
+ * message parsing and dispatch in the client.
  */
 export interface Envelope {
   /** Protocol version (literal 1, not number) */

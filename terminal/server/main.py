@@ -21,12 +21,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from frontend.backend.backtest import create_backtest_queue
-from frontend.backend.backtest import run_backtest_with_delay
-from frontend.backend.replay_buffer import ReplayBuffer
-from frontend.backend.websocket import ConnectionManager
-from frontend.backend.websocket import websocket_endpoint
-from frontend.backend import websocket as ws_module
+from terminal.server.backtest import create_backtest_queue
+from terminal.server.backtest import run_backtest_with_delay
+from terminal.server.replay_buffer import ReplayBuffer
+from terminal.server.websocket import ConnectionManager
+from terminal.server.websocket import websocket_endpoint
+from terminal.server import websocket as ws_module
 
 
 @asynccontextmanager
@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI):
     broadcast_task = asyncio.create_task(broadcast_from_queue())
     backtest_task = asyncio.create_task(run_backtest_with_delay(engine, queue))
 
-    print("Backend running at http://localhost:8000")
+    print("Server running at http://localhost:8000")
 
     yield
 
@@ -89,11 +89,11 @@ app = FastAPI(lifespan=lifespan)
 # Add WebSocket route using decorator pattern (FastAPI standard)
 app.websocket("/ws")(websocket_endpoint)
 
-# Mount static files (frontend build output)
-# Note: This will fail if frontend/web/dist/ doesn't exist yet
-# Run `cd frontend/web && npm install && npm run build` first
+# Mount static files (client build output)
+# Note: This will fail if terminal/client/dist/ doesn't exist yet
+# Run `cd terminal/client && npm install && npm run build` first
 try:
-    app.mount("/", StaticFiles(directory="frontend/web/dist", html=True), name="static")
+    app.mount("/", StaticFiles(directory="terminal/client/dist", html=True), name="static")
 except RuntimeError:
     # dist/ directory not built yet - this is expected during tests
     pass

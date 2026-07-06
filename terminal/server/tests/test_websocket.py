@@ -5,9 +5,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from frontend.backend.websocket import ConnectionManager, websocket_endpoint
-from frontend.backend.replay_buffer import ReplayBuffer
-from frontend.backend import websocket as ws_module
+from terminal.server.websocket import ConnectionManager, websocket_endpoint
+from terminal.server.replay_buffer import ReplayBuffer
+from terminal.server import websocket as ws_module
 
 
 def create_test_envelope(seq: int, ts_event: int = 1580395680000) -> dict:
