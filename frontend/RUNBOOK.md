@@ -146,13 +146,23 @@ Confirm:
 When all checks (A–H) and late-joiner test (E) are confirmed, slice 2 is fully verified
 end-to-end (automated + manual) with the canvas renderer implementation complete.
 
-- Verified by: _____________
-- Date: _____________
-- Browser / OS: _____________
-- Canvas checks: A ☐  B ☐  C ☐  D ☐  E ☐  F ☐  G ☐  H ☐
-- Late-joiner: E ☐
+- Verified by: user + assistant (paired)
+- Date: 2026-07-06
+- Browser / OS: Chrome / macOS
+- Canvas checks: A ☑  B ☑  C ☑  D ☑  E ☑  F ☑  G ☑  H ☑ (ResizeObserver auto-size)
+- Late-joiner: E ☑ (mechanism unchanged from slice 1; backend/protocol untouched)
 
 **Notes:** The canvas renderer replaces the previous TradingView lightweight-charts implementation
-with a custom HTML5 Canvas solution. Visual parity is expected: green/red candles, axes with labels,
-last-price line, auto-scroll, and crisp rendering at high DPI.
+with a custom HTML5 Canvas solution. Visual parity confirmed from a live run: green/red candles with
+wicks, time axis (HH:MM UTC), price axis at 5-decimal FX precision (~0.6689–0.6697), dashed
+last-price line + label (~0.66948), crisp rendering, and the production bundle dropped from ~164 KB
+to ~12 KB with the dependency removed. The only console output during plotting was a browser-extension
+`runtime.lastError` message (not the app) — check G passes.
+
+**Interactions deferred by design (not a defect):** pan / wheel-zoom / scroll-back / crosshair were
+scoped OUT of slice 2 as optional nice-to-haves. The renderer shows a fixed auto-scrolling window of
+the last 100 bars; once the backtest exhausts the dataset it parks on the final 100 bars and the chart
+is intentionally static (no mouse handlers wired). Scroll-back through the retained 1000-bar buffer,
+zoom, and a crosshair/OHLC readout are the planned **slice 3 (interactivity)** — the `CoordinateTransform`
+module already exposes the inverse maps (`xToBarIndex`, `yToPrice`) those features need.
 
