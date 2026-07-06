@@ -481,8 +481,8 @@ describe('formatTime', () => {
   });
 
   it('should format arbitrary timestamp with HH:MM UTC', () => {
-    // 2024-01-15 14:30:45.123 UTC = 1705330245123
-    const timestamp = 1705330245123;
+    // 2024-01-15 14:30:45.123 UTC = 1705329045123
+    const timestamp = 1705329045123;
     expect(formatTime(timestamp)).toBe('14:30');
   });
 
