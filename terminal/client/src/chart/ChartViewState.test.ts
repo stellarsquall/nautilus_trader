@@ -42,11 +42,14 @@ describe('ChartViewState', () => {
     });
 
     it('should handle totalBars less than visibleCount', () => {
+      // Zoom-out is capped at the available data (floored at MIN_VISIBLE_BARS),
+      // so a 10-bar buffer clamps the requested 100 down to MIN_VISIBLE_BARS
+      // rather than padding the chart with ~90 empty slots.
       const viewState = new ChartViewState(10, 100);
       const state = viewState.getState();
 
       expect(state.visibleStart).toBe(0);
-      expect(state.visibleCount).toBe(DEFAULT_VISIBLE_BARS);
+      expect(state.visibleCount).toBe(MIN_VISIBLE_BARS);
     });
 
     it('should handle zero totalBars', () => {

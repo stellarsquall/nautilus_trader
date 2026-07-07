@@ -154,10 +154,19 @@ export class ChartViewState {
   }
 
   /**
-   * Clamp visibleCount to [MIN_VISIBLE_BARS, MAX_VISIBLE_BARS].
+   * Clamp visibleCount to [MIN_VISIBLE_BARS, effectiveMax].
+   *
+   * effectiveMax caps zoom-out at the amount of data that actually exists: you
+   * cannot zoom out to show more bars than the buffer holds (which would pad the
+   * chart with empty space). When totalBars === 0 the count is not yet known
+   * (startup), so no data cap is applied and the full [MIN, MAX] range is used.
    */
   private clampVisibleCount(count: number): number {
-    return Math.max(MIN_VISIBLE_BARS, Math.min(MAX_VISIBLE_BARS, Math.round(count)));
+    const dataCap = this.totalBars > 0
+      ? Math.max(MIN_VISIBLE_BARS, this.totalBars)
+      : MAX_VISIBLE_BARS;
+    const effectiveMax = Math.min(MAX_VISIBLE_BARS, dataCap);
+    return Math.max(MIN_VISIBLE_BARS, Math.min(effectiveMax, Math.round(count)));
   }
 
   /**

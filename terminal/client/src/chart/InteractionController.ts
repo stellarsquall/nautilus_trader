@@ -21,12 +21,21 @@ export class InteractionController {
   private dragStartX = 0;
   private dragStartVisibleStart = 0;
 
+  // Smoothing constant for wheel/trackpad zoom (scales scroll magnitude).
+  private static readonly ZOOM_SENSITIVITY = 0.008;
+  // Clamp per-event scroll magnitude so a single mouse-wheel notch can't
+  // zoom too aggressively while a fine trackpad scroll stays smooth.
+  private static readonly MAX_WHEEL_DELTA = 40;
+
   // Bound event handler references (for cleanup)
   private boundHandleMouseDown: (event: MouseEvent) => void;
   private boundHandleMouseMove: (event: MouseEvent) => void;
-  private boundHandleMouseUp: (event: MouseEvent) => void;
   private boundHandleMouseLeave: (event: MouseEvent) => void;
   private boundHandleWheel: (event: WheelEvent) => void;
+  // Window-level drag handlers, attached only while a drag is active so the
+  // pan keeps working (and ends) even when the pointer leaves the canvas.
+  private boundHandleDragMove: (event: MouseEvent) => void;
+  private boundHandleDragEnd: (event: MouseEvent) => void;
 
   /**
    * Construct and attach event listeners.
@@ -50,83 +59,118 @@ export class InteractionController {
     // Bind event handlers to preserve 'this' context
     this.boundHandleMouseDown = this.handleMouseDown.bind(this);
     this.boundHandleMouseMove = this.handleMouseMove.bind(this);
-    this.boundHandleMouseUp = this.handleMouseUp.bind(this);
     this.boundHandleMouseLeave = this.handleMouseLeave.bind(this);
     this.boundHandleWheel = this.handleWheel.bind(this);
+    this.boundHandleDragMove = this.handleDragMove.bind(this);
+    this.boundHandleDragEnd = this.handleDragEnd.bind(this);
 
-    // Attach event listeners
+    // Attach event listeners. mousemove on the canvas drives the crosshair;
+    // the drag pan uses window-level listeners added on mousedown.
     this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
     this.canvas.addEventListener('mousemove', this.boundHandleMouseMove);
-    this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
     this.canvas.addEventListener('mouseleave', this.boundHandleMouseLeave);
-    this.canvas.addEventListener('wheel', this.boundHandleWheel);
+    // wheel must be non-passive so preventDefault() can suppress page scroll/zoom.
+    this.canvas.addEventListener('wheel', this.boundHandleWheel, { passive: false });
+
+    // Affordance: a grab hand indicates the chart is draggable.
+    this.canvas.style.cursor = 'grab';
   }
 
   /**
    * Destroy and remove all event listeners.
    *
-   * MUST be called to avoid memory leaks. All listeners added in constructor
-   * are removed here.
+   * MUST be called to avoid memory leaks. All listeners added in the constructor
+   * are removed here, plus any active window-level drag listeners.
    */
   public destroy(): void {
     this.canvas.removeEventListener('mousedown', this.boundHandleMouseDown);
     this.canvas.removeEventListener('mousemove', this.boundHandleMouseMove);
-    this.canvas.removeEventListener('mouseup', this.boundHandleMouseUp);
     this.canvas.removeEventListener('mouseleave', this.boundHandleMouseLeave);
     this.canvas.removeEventListener('wheel', this.boundHandleWheel);
-  }
-
-  private handleMouseDown(event: MouseEvent): void {
-    this.isDragging = true;
-    this.dragStartX = event.clientX;
-    this.dragStartVisibleStart = this.viewState.getState().visibleStart;
-  }
-
-  private handleMouseMove(event: MouseEvent): void {
-    if (this.isDragging) {
-      // Drag-pan logic
-      const deltaX = event.clientX - this.dragStartX;
-      const deltaBars = -deltaX / this.transform.getBarWidth();
-
-      // Reset to drag start position and apply delta
-      const state = this.viewState.getState();
-      const currentVisibleStart = state.visibleStart;
-      const targetVisibleStart = this.dragStartVisibleStart + Math.round(deltaBars);
-      const actualDeltaBars = targetVisibleStart - currentVisibleStart;
-
-      this.viewState.pan(actualDeltaBars);
-      this.callbacks.onViewChanged();
-    } else {
-      // Crosshair update logic
-      const rect = this.canvas.getBoundingClientRect();
-      const canvasX = event.clientX - rect.left;
-      const canvasY = event.clientY - rect.top;
-      const barIndex = this.transform.xToBarIndex(canvasX);
-
-      this.callbacks.onMouseMove(canvasX, canvasY, barIndex);
-    }
-  }
-
-  private handleMouseUp(event: MouseEvent): void {
+    // Tear down any in-flight drag listeners.
+    window.removeEventListener('mousemove', this.boundHandleDragMove);
+    window.removeEventListener('mouseup', this.boundHandleDragEnd);
     this.isDragging = false;
   }
 
-  private handleMouseLeave(event: MouseEvent): void {
+  private handleMouseDown(event: MouseEvent): void {
+    // Prevent native text/image drag or selection from swallowing the drag.
+    event.preventDefault();
+
+    this.isDragging = true;
+    this.dragStartX = event.clientX;
+    this.dragStartVisibleStart = this.viewState.getState().visibleStart;
+    this.canvas.style.cursor = 'grabbing';
+
+    // Promote move/up to the window so the drag survives the pointer leaving
+    // the canvas and always ends on release, wherever that happens.
+    window.addEventListener('mousemove', this.boundHandleDragMove);
+    window.addEventListener('mouseup', this.boundHandleDragEnd);
+  }
+
+  /** Window-level: pan while a drag is active. */
+  private handleDragMove(event: MouseEvent): void {
+    if (!this.isDragging) return;
+
+    const deltaX = event.clientX - this.dragStartX;
+    const deltaBars = -deltaX / this.transform.getBarWidth();
+
+    // Compute the target relative to the drag origin, then apply the residual
+    // via the relative pan() (cumulative, drift-free).
+    const currentVisibleStart = this.viewState.getState().visibleStart;
+    const targetVisibleStart = this.dragStartVisibleStart + Math.round(deltaBars);
+    this.viewState.pan(targetVisibleStart - currentVisibleStart);
+    this.callbacks.onViewChanged();
+  }
+
+  /** Window-level: end the drag on mouse release. */
+  private handleDragEnd(_event: MouseEvent): void {
+    this.isDragging = false;
+    this.canvas.style.cursor = 'grab';
+    window.removeEventListener('mousemove', this.boundHandleDragMove);
+    window.removeEventListener('mouseup', this.boundHandleDragEnd);
+  }
+
+  /** Canvas-level: update the crosshair (suppressed while dragging). */
+  private handleMouseMove(event: MouseEvent): void {
+    if (this.isDragging) return;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const canvasX = event.clientX - rect.left;
+    const canvasY = event.clientY - rect.top;
+    const barIndex = this.transform.xToBarIndex(canvasX);
+
+    this.callbacks.onMouseMove(canvasX, canvasY, barIndex);
+  }
+
+  private handleMouseLeave(_event: MouseEvent): void {
     this.callbacks.onMouseLeave();
   }
 
   private handleWheel(event: WheelEvent): void {
     event.preventDefault();
 
-    // Compute zoom factor
-    const zoomFactor = event.deltaY > 0 ? 1.1 : 0.9;
-
-    // Compute anchor bar index (bar under cursor)
     const rect = this.canvas.getBoundingClientRect();
     const canvasX = event.clientX - rect.left;
-    const anchorBarIndex = this.transform.xToBarIndex(canvasX);
 
-    // Apply zoom
+    // Two-finger horizontal swipe (no pinch): pan through time.
+    if (!event.ctrlKey && Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+      const deltaBars = event.deltaX / this.transform.getBarWidth();
+      this.viewState.pan(deltaBars);
+      this.callbacks.onViewChanged();
+      return;
+    }
+
+    // Pinch (ctrlKey) or vertical scroll / mouse wheel: smooth cursor-anchored
+    // zoom. Scaling by the (clamped) scroll magnitude keeps a fine trackpad
+    // scroll smooth while a single mouse-wheel notch still zooms perceptibly,
+    // instead of the old flat 10%-per-event that stuttered on trackpads.
+    const clampedDelta = Math.max(
+      -InteractionController.MAX_WHEEL_DELTA,
+      Math.min(InteractionController.MAX_WHEEL_DELTA, event.deltaY)
+    );
+    const zoomFactor = Math.exp(clampedDelta * InteractionController.ZOOM_SENSITIVITY);
+    const anchorBarIndex = this.transform.xToBarIndex(canvasX);
     this.viewState.zoom(zoomFactor, anchorBarIndex);
     this.callbacks.onViewChanged();
   }
