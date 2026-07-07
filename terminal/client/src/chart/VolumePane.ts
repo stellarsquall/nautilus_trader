@@ -38,6 +38,9 @@ export class VolumePane implements Pane {
   // Visual constants
   private static readonly COLOR_UP = '#26a69a';
   private static readonly COLOR_DOWN = '#ef5350';
+  // Slight transparency on the volume bars so they read as a secondary,
+  // supporting layer beneath the price pane (axis/labels stay fully opaque).
+  private static readonly BAR_ALPHA = 0.72;
   private static readonly COLOR_GRID = '#e0e0e0';
   private static readonly COLOR_TEXT = '#333333';
   private static readonly COLOR_AXIS_BG = '#f5f5f5';
@@ -203,6 +206,8 @@ export class VolumePane implements Pane {
     const baselineYRelative = this.verticalTransform.priceToY(0);
     const baselineYAbsolute = paneRect.y + baselineYRelative;
 
+    ctx.save();
+    ctx.globalAlpha = VolumePane.BAR_ALPHA;
     for (let i = visibleBarRange.start; i <= visibleBarRange.end; i++) {
       const bar = bars[i];
       if (!bar) continue; // Cull missing bars
@@ -233,6 +238,7 @@ export class VolumePane implements Pane {
         barHeight
       );
     }
+    ctx.restore();
   }
 
   private drawVolumeAxis(
