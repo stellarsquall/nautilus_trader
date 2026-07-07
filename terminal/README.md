@@ -156,6 +156,28 @@ class CandlestickPane {
 5. **Pane validates and renders**: `CandlestickPane` validates OHLC relationships and calls `renderer.update()`.
 6. **Renderer updates chart**: `CanvasCandlestickRenderer` uses coordinate transforms to map OHLC data to canvas pixels and renders candlesticks with crisp, high-DPI rendering.
 
+## Interactions
+
+The chart is navigable (all client-side; the server and `/ws` protocol are untouched):
+
+- **Drag-pan** — click-drag horizontally to scroll back and forth through the rolling
+  1000-bar buffer.
+- **Wheel-zoom** — scroll to change the number of visible bars, **anchored at the cursor**
+  (the bar under the pointer stays put), clamped to 20–500 bars.
+- **Crosshair** — on hover, vertical/horizontal guide lines with price (y) and time (x)
+  labels plus an **OHLC readout** for the bar under the cursor; hides on mouse-leave. It
+  renders on a separate overlay `<canvas>` so it never redraws the main chart.
+- **Auto-follow + reset** — the view stays pinned to the newest bar as data streams in;
+  panning away pauses follow (so incoming bars don't yank the view) and reveals a
+  **“Latest”** button that snaps back to the live tail and re-enables follow.
+- **Visible-window autoscale** — the price axis recomputes from only the bars currently on
+  screen as you pan/zoom.
+
+Interactions are built on two reusable seams: a pure, DOM-free `ChartViewState` (visible
+window + follow flag, fully unit-tested without a browser) and the existing
+`CoordinateTransform` inverse maps (`xToBarIndex`, `yToPrice`) for hit-testing — no chart
+library, no re-implemented coordinate math.
+
 ## Extensibility
 
 The architecture is designed for future order-flow visualization features. Adding new capabilities requires minimal changes:

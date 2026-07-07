@@ -96,7 +96,35 @@ this, the wire format is correct.)
 
 ---
 
-## 3. Late-joiner check — replay buffer
+## 3. Slice 3 — Chart Interactions Verification
+
+With the chart streaming, verify navigation. All interactions are **client-only** — the
+server and `/ws` protocol are untouched.
+
+| # | Action | Expected | Pass? |
+|---|--------|----------|-------|
+| I | **Drag left** (mouse down on chart, move left, release) | View pans back to **older** bars | ☐ |
+| J | **Drag right** back toward the newest bar | View scrolls toward the **tail** | ☐ |
+| K | **Wheel up / down** over the chart | Time axis **zooms** (fewer / more visible bars) | ☐ |
+| L | Zoom while pointing at a specific bar | The bar **under the cursor stays under the cursor** (cursor-anchored) | ☐ |
+| M | Keep zooming in, then out | Zoom **clamps** at min (20 bars) and max (500 bars) — no runaway | ☐ |
+| N | Move the mouse over the chart | **Crosshair** appears: vertical + horizontal lines, price label (y-axis), time label (x-axis), and an **OHLC readout** box for the hovered bar | ☐ |
+| O | Move the mouse off the chart | Crosshair **hides** | ☐ |
+| P | Fresh load, don't touch anything | Chart **auto-follows** the latest bar as new bars stream in | ☐ |
+| Q | Pan away from the tail | A **“Latest”** reset button appears (top-right) | ☐ |
+| R | While panned away, let new bars arrive | The view does **NOT** jump — auto-follow is paused | ☐ |
+| S | Click **“Latest”** | View snaps to the tail, follow resumes, button hides | ☐ |
+| T | Pan / zoom across regions of different price | Y-axis **autoscales to the visible window** (price labels track the bars on screen) | ☐ |
+
+> Mechanism: a pure `ChartViewState` module owns the visible window + follow flag;
+> `InteractionController` translates mouse/wheel events into pan/zoom (reusing
+> `CoordinateTransform` inverse maps for cursor-anchoring); a separate overlay `<canvas>`
+> renders the crosshair without redrawing the main chart; the price axis autoscales from
+> the visible bars each frame.
+
+---
+
+## 4. Late-joiner check — replay buffer
 
 This proves a browser that connects *after* streaming started still sees recent history.
 
@@ -118,14 +146,14 @@ Confirm:
 
 ---
 
-## 4. Shut down
+## 5. Shut down
 
 - `Ctrl-C` in the `run.sh` terminal stops uvicorn and the backtest task.
 - Nothing else to clean up — no external services, no DB.
 
 ---
 
-## 5. Troubleshooting
+## 6. Troubleshooting
 
 | Symptom | Likely cause / fix |
 |---|---|
@@ -141,7 +169,18 @@ Confirm:
 
 ---
 
-## 6. Sign-off
+## 7. Sign-off
+
+When the slice-2 canvas checks (A–H) **and** the slice-3 interaction checks (I–T) **and**
+the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
+
+**Slice 3 (chart interactions) sign-off:**
+- Verified by: _______  Date: _______  Browser / OS: _______
+- Interaction checks: I ☐ J ☐ K ☐ L ☐ M ☐ N ☐ O ☐ P ☐ Q ☐ R ☐ S ☐ T ☐
+
+---
+
+### Slice 2 sign-off (recorded)
 
 When all checks (A–H) and late-joiner test (E) are confirmed, slice 2 is fully verified
 end-to-end (automated + manual) with the canvas renderer implementation complete.

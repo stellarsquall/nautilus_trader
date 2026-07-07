@@ -72,9 +72,19 @@ The following commands verify the canvas renderer implementation:
 ## Summary
 ✅ **All verification checks passed**
 - Server tests: 74/74 passed
+- Client tests: 200 passed (8 files) — up from 78 baseline
 - Client build: Success
 - Core isolation: Confirmed (0 changes to core files)
+- Server isolation (Slice 3): Confirmed (0 changes to `terminal/server/`)
+- Wire contract (Slice 3): Confirmed (0 changes to `types.ts`, `CandlestickPane.ts`, `Renderer.ts`)
 - Terminal changes: Confirmed (4783 lines modified)
+
+**Slice 3 (Chart Interactions):** +122 new client tests for `ChartViewState`,
+`InteractionController`, `CrosshairOverlay`, `ResetToLatestButton`, and renderer
+integration (plus 15 auto-generated L1 integration tests). Client-only: the Python
+server and the `/ws` envelope protocol are untouched. No third-party charting library
+(grep gate for `lightweight-charts|tradingview` returns 0 matches in `src/` and
+`package.json`).
 ---
 ## 1. Server Test Suite
 **Command:**
