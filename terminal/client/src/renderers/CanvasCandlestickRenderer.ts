@@ -10,6 +10,10 @@ import {
   type BarRange,
   type AxisMargins,
 } from '../chart/CoordinateTransform';
+import { ChartViewState } from '../chart/ChartViewState';
+import { InteractionController } from '../chart/InteractionController';
+import { CrosshairOverlay } from '../chart/CrosshairOverlay';
+import { ResetToLatestButton } from '../chart/ResetToLatestButton';
 
 export class CanvasCandlestickRenderer implements Renderer {
   // Canvas and context
@@ -32,6 +36,12 @@ export class CanvasCandlestickRenderer implements Renderer {
   // RAF batching state
   private rafHandle: number | null = null;
   private isDirty = false;
+
+  // Interaction components
+  private viewState: ChartViewState;
+  private interactionController: InteractionController;
+  private crosshairOverlay: CrosshairOverlay;
+  private resetButton: ResetToLatestButton;
 
   // Axis margin configuration (pixels)
   private static readonly MARGINS: AxisMargins = {
@@ -105,6 +115,41 @@ export class CanvasCandlestickRenderer implements Renderer {
     });
     this.resizeObserver.observe(this.container);
 
+    // Initialize view-state (initially 0 bars, will update on first bar)
+    this.viewState = new ChartViewState(0, this.VISIBLE_BARS);
+
+    // Create crosshair overlay
+    this.crosshairOverlay = new CrosshairOverlay(this.container, this.transform);
+
+    // Create interaction controller with callbacks
+    this.interactionController = new InteractionController(
+      this.canvas,
+      this.transform,
+      this.viewState,
+      {
+        onViewChanged: () => {
+          this.updateTransformRanges(); // Recompute transform ranges from view-state
+          this.scheduleRedraw(); // Redraw main chart
+          this.resetButton.updateVisibility(); // Update button visibility
+        },
+        onMouseMove: (canvasX, canvasY, barIndex) => {
+          this.crosshairOverlay.show({ canvasX, canvasY, barIndex });
+        },
+        onMouseLeave: () => {
+          this.crosshairOverlay.hide();
+        },
+      }
+    );
+
+    // Create reset-to-latest button
+    this.resetButton = new ResetToLatestButton(this.container, this.viewState, {
+      onReset: () => {
+        this.updateTransformRanges();
+        this.scheduleRedraw();
+        this.resetButton.updateVisibility();
+      },
+    });
+
     // Initial render (blank)
     this.scheduleRedraw();
   }
@@ -144,14 +189,35 @@ export class CanvasCandlestickRenderer implements Renderer {
       }
     }
 
-    // Update transform ranges
+    // Update view-state with new total bar count
+    this.viewState.setTotalBars(this.bars.length);
+
+    // If in auto-follow mode, notify view-state to advance window
+    this.viewState.onNewBar(this.bars.length);
+
+    // Update crosshair overlay's bar reference
+    this.crosshairOverlay.setBars(this.bars);
+
+    // Update transform ranges (view-state may have advanced)
     this.updateTransformRanges();
+
+    // Update reset button visibility (follow mode may have changed)
+    this.resetButton.updateVisibility();
 
     // Schedule redraw
     this.scheduleRedraw();
   }
 
   public destroy(): void {
+    // Destroy interaction controller (removes event listeners)
+    this.interactionController.destroy();
+
+    // Destroy crosshair overlay
+    this.crosshairOverlay.destroy();
+
+    // Destroy reset button
+    this.resetButton.destroy();
+
     this.resizeObserver.disconnect();
 
     if (this.rafHandle !== null) {
@@ -188,8 +254,13 @@ export class CanvasCandlestickRenderer implements Renderer {
       return;
     }
 
-    const visibleStart = Math.max(0, this.bars.length - this.VISIBLE_BARS);
-    const visibleEnd = this.bars.length - 1;
+    // Get visible range from view-state (replaces hardcoded tail window)
+    const state = this.viewState.getState();
+    const visibleStart = state.visibleStart;
+    const visibleEnd = Math.min(
+      visibleStart + state.visibleCount - 1,
+      this.bars.length - 1
+    );
 
     const barRange: BarRange = {
       start: visibleStart,
@@ -198,6 +269,7 @@ export class CanvasCandlestickRenderer implements Renderer {
 
     this.transform.setVisibleBarRange(barRange);
 
+    // Autoscale price from VISIBLE bars only (not entire buffer)
     const priceRange = autoscalePriceRange(this.bars, visibleStart, visibleEnd);
     if (priceRange) {
       this.transform.setPriceRange(priceRange);
@@ -240,6 +312,13 @@ export class CanvasCandlestickRenderer implements Renderer {
 
   private handleResize(newWidth: number, newHeight: number): void {
     this.resizeCanvas(newWidth, newHeight);
+
+    // Resize crosshair overlay to match
+    this.crosshairOverlay.updateDimensions(newWidth, newHeight);
+
+    // Recompute transform ranges (chart dimensions changed)
+    this.updateTransformRanges();
+
     this.scheduleRedraw();
   }
 
