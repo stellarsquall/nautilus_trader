@@ -186,6 +186,16 @@ describe('InteractionController', () => {
       expect(mockCallbacks.onViewChanged).toHaveBeenCalled();
     });
 
+    it('should accumulate sub-bar horizontal deltas until a whole bar pans', () => {
+      // barWidth=10, deltaX=5 -> 0.5 bars each; first tick rounds to nothing.
+      canvas.dispatchEvent(new WheelEvent('wheel', { deltaX: 5, deltaY: 0, clientX: 400 }));
+      expect(mockViewState.pan).not.toHaveBeenCalled();
+
+      // Second identical tick brings the accumulator to 1.0 -> pan(1).
+      canvas.dispatchEvent(new WheelEvent('wheel', { deltaX: 5, deltaY: 0, clientX: 400 }));
+      expect(mockViewState.pan).toHaveBeenCalledWith(1);
+    });
+
     it('should compute the zoom anchor from cursor position', () => {
       vi.mocked(mockTransform.xToBarIndex).mockReturnValue(75);
       canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: 50, clientX: 750 }));

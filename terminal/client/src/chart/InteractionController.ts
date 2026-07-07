@@ -21,6 +21,11 @@ export class InteractionController {
   private dragStartX = 0;
   private dragStartVisibleStart = 0;
 
+  // Fractional-bar accumulator for wheel/trackpad horizontal panning: a single
+  // scroll tick is often a fraction of a bar wide and would round to zero, so we
+  // sum deltas and pan once a whole bar's worth has accrued.
+  private wheelPanAccumulator = 0;
+
   // Smoothing constant for wheel/trackpad zoom (scales scroll magnitude).
   private static readonly ZOOM_SENSITIVITY = 0.008;
   // Clamp per-event scroll magnitude so a single mouse-wheel notch can't
@@ -153,11 +158,16 @@ export class InteractionController {
     const rect = this.canvas.getBoundingClientRect();
     const canvasX = event.clientX - rect.left;
 
-    // Two-finger horizontal swipe (no pinch): pan through time.
+    // Two-finger horizontal swipe (no pinch): pan through time. Accumulate
+    // sub-bar deltas so fine scrolling still pans instead of rounding to zero.
     if (!event.ctrlKey && Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
-      const deltaBars = event.deltaX / this.transform.getBarWidth();
-      this.viewState.pan(deltaBars);
-      this.callbacks.onViewChanged();
+      this.wheelPanAccumulator += event.deltaX / this.transform.getBarWidth();
+      const wholeBars = Math.trunc(this.wheelPanAccumulator);
+      if (wholeBars !== 0) {
+        this.wheelPanAccumulator -= wholeBars;
+        this.viewState.pan(wholeBars);
+        this.callbacks.onViewChanged();
+      }
       return;
     }
 
