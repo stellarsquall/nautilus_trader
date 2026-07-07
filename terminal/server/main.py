@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI):
     engine, queue = create_backtest_queue(loop, delay_ms=50)
 
     # Initialize replay buffer and connection manager
-    replay_buffer = ReplayBuffer(capacity=100)
+    replay_buffer = ReplayBuffer(capacity=1000)
     ws_module.manager = ConnectionManager(replay_buffer)
 
     # Background task to broadcast from queue
