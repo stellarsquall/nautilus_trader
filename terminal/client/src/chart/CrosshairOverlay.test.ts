@@ -17,6 +17,7 @@ const createMockContext = () => ({
   measureText: vi.fn(() => ({ width: 50 })),
   setLineDash: vi.fn(),
   scale: vi.fn(),
+  setTransform: vi.fn(),
   save: vi.fn(),
   restore: vi.fn(),
   fillStyle: '',

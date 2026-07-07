@@ -115,8 +115,8 @@ export class CrosshairOverlay {
     this.overlayCanvas.style.width = `${width}px`;
     this.overlayCanvas.style.height = `${height}px`;
 
-    // Scale context for DPR
-    this.ctx.scale(this.currentDPR, this.currentDPR);
+    // Scale context for DPR (use setTransform to avoid accumulation)
+    this.ctx.setTransform(this.currentDPR, 0, 0, this.currentDPR, 0, 0);
   }
 
   /**
