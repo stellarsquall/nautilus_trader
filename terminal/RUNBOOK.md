@@ -5,7 +5,7 @@ green and captured in [`VERIFICATION.md`](./VERIFICATION.md). The **one remainin
 step a human must do** is eyeball the live chart in a browser — an agent can't
 watch pixels paint. This runbook is that ~3-minute smoke test.
 
-- **Current Slice:** Slice 2 (Canvas Renderer)`
+- **Current Slice:** Slice 4 (Multi-Pane Layout + Volume Pane)`
 - **What you're verifying:** 1-minute AUD/USD candles stream progressively over a
   typed WebSocket envelope using a custom HTML5 Canvas renderer, with crisp rendering,
   axes, last-price line, and no external charting dependencies.
@@ -130,6 +130,37 @@ server and `/ws` protocol are untouched.
 
 ---
 
+## 3b. Slice 4 — Multi-Pane Layout & Volume Pane Verification
+
+The chart is now composed of stacked panes (price 75% / volume 25%) driven by a shared
+time axis. Still **client-only** for rendering; the one server-side change is the replay
+buffer capacity (see §4). All slice-2/3 behavior must continue to work.
+
+| # | Action | Expected | Pass? |
+|---|--------|----------|-------|
+| U1 | Look at the bottom quarter of the chart | A **volume pane** is visible below the price pane, with its own volume axis | ☐ |
+| U2 | Inspect the volume bars | Bars are **delta-colored** — green when the candle closed up (close ≥ open), red when it closed down — and rendered **slightly transparent** (supporting layer) | ☐ |
+| U3 | **Pan / zoom** the chart (any slice-3 gesture) | Both panes move/zoom **together in lockstep** on the shared time axis | ☐ |
+| U4 | Move the mouse over the chart | The **crosshair spans both panes**; the value label reads **price** in the price pane and **volume** in the volume pane | ☐ |
+| U5 | Re-run the slice-3 checks (I–T) | All slice-3 interactions still pass unchanged | ☐ |
+| U6 | Let the buffer exceed the visible window (>100 bars), then **click-drag** | Pan works **immediately** — no zoom warm-up needed (regression guard for the follow-freeze bug) | ☐ |
+| U7 | After bars have accumulated, **refresh the page**, then click-drag | Pan works **immediately** after refresh (page re-seeded with up to 1000 buffered bars) | ☐ |
+
+> Mechanism: `PaneLayout` stacks `CandlestickPane` + `VolumePane` and owns the single
+> shared horizontal (time) `CoordinateTransform`; `InteractionController` and the crosshair
+> both drive that one transform, so panes stay locked together. Each pane owns its own
+> vertical transform (price vs. volume), and the crosshair uses a per-pane value resolver
+> for the correct readout. Volume bars are colored by candle direction (not aggressor side
+> — that arrives with the slice-5 trade-tick pipeline) at `globalAlpha 0.72`.
+>
+> **Two fixes folded in with this slice:** (1) the renderer no longer double-updates the
+> bar count (`setTotalBars` + `onNewBar`) — that froze `visibleStart` at 0 while following
+> once the buffer passed the visible window, silently killing pan (U6); (2) the replay
+> buffer was sized up to the client's `MAX_BARS` so a refreshed late-joiner has immediate
+> pan scrollback (U7, §4).
+
+---
+
 ## 4. Late-joiner check — replay buffer
 
 This proves a browser that connects *after* streaming started still sees recent history.
@@ -137,7 +168,7 @@ This proves a browser that connects *after* streaming started still sees recent 
 1. **Stop** the server (Ctrl-C in the `run.sh` terminal) and **relaunch** it
    (`./run.sh`), or just leave the first run going and instead:
 2. Wait **~5 seconds** after startup (so a batch of bars has been emitted and pushed
-   into the replay buffer, capacity **100**).
+   into the replay buffer, capacity **1000**).
 3. Open a **new browser tab / incognito window** at http://localhost:8000.
 
 Confirm:
@@ -146,9 +177,10 @@ Confirm:
 |---|----------|-------|
 | E | The new tab shows bars **immediately** on connect (the buffered backlog), not a blank chart that starts from zero | ☐ |
 
-> Mechanism: on WebSocket connect, `ConnectionManager` replays up to the last 100
+> Mechanism: on WebSocket connect, `ConnectionManager` replays up to the last 1000
 > envelopes from `ReplayBuffer` before live bars resume — so late joiners are never
-> staring at an empty chart.
+> staring at an empty chart, and a refreshed page is re-seeded with enough history to
+> pan immediately (sized to the client renderer's `MAX_BARS`).
 
 ---
 
@@ -178,7 +210,21 @@ Confirm:
 ## 7. Sign-off
 
 When the slice-2 canvas checks (A–H) **and** the slice-3 interaction checks (I–T) **and**
-the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
+the slice-4 multi-pane checks (U1–U7) **and** the late-joiner test (E) are confirmed, the
+terminal is verified end-to-end.
+
+**Slice 4 (multi-pane layout + volume pane) sign-off:**
+- Verified by: user + assistant (paired)   Date: 2026-07-07   Browser / OS: Chrome / macOS
+- Multi-pane checks: U1 ☑ U2 ☑ U3 ☑ U4 ☑ U5 ☑ U6 ☑ U7 ☑
+
+**Notes:** Verified from a live run. Volume pane (75/25 split) with delta-colored,
+0.72-alpha bars; pan/zoom and crosshair span both panes in lockstep on a shared time
+axis; per-pane crosshair readout (price vs. volume). Two bugs surfaced during sign-off and
+were fixed before folding: the follow-freeze pan bug (renderer double-updated the bar
+count, freezing `visibleStart` at 0 — diagnosed from live `[drag-diag]` console traces)
+and the after-refresh dead-pan (replay buffer 100 → 1000, matching client `MAX_BARS`).
+Core (`crates/`, `nautilus_trader/`) untouched; the only server change is the replay
+buffer capacity.
 
 **Slice 3 (chart interactions) sign-off:**
 - Verified by: user + assistant (paired)   Date: 2026-07-06   Browser / OS: Chrome / macOS
