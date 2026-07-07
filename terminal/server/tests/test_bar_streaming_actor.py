@@ -20,9 +20,6 @@ from unittest.mock import Mock
 
 import pytest
 
-# Add parent directory to path to allow imports
-sys.path.insert(0, "/Users/robinbeck/Projects/nautilus/nautilus_trader_stellarsquall/.worktrees/issue-7732fe1e-04-backend-bar-streaming-actor")
-
 # Check for dependencies
 try:
     import msgspec  # noqa: F401
