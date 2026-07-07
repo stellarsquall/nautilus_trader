@@ -254,23 +254,28 @@ export class CanvasCandlestickRenderer implements Renderer {
       return;
     }
 
-    // Get visible range from view-state (replaces hardcoded tail window)
+    // Get visible window from view-state.
     const state = this.viewState.getState();
-    const visibleStart = state.visibleStart;
-    const visibleEnd = Math.min(
-      visibleStart + state.visibleCount - 1,
-      this.bars.length - 1
-    );
+    const visibleCount = state.visibleCount;
 
-    const barRange: BarRange = {
-      start: visibleStart,
-      end: visibleEnd,
-    };
+    // Right-anchor the viewport: the render window is always exactly
+    // `visibleCount` slots wide, and its right edge tracks the newest bar when
+    // following (or the panned position otherwise). renderStart may be negative
+    // and renderEnd may exceed bars.length - 1 — those slots are simply empty
+    // (drawCandles skips missing bars), so a sparse chart shows the latest bar
+    // flush right with empty space on the LEFT (standard trading-chart layout).
+    const renderEnd = state.followLatest
+      ? this.bars.length - 1
+      : state.visibleStart + visibleCount - 1;
+    const renderStart = renderEnd - visibleCount + 1;
 
-    this.transform.setVisibleBarRange(barRange);
+    this.transform.setVisibleBarRange({ start: renderStart, end: renderEnd });
 
-    // Autoscale price from VISIBLE bars only (not entire buffer)
-    const priceRange = autoscalePriceRange(this.bars, visibleStart, visibleEnd);
+    // Autoscale price from the REAL visible bars only (clamp the render window
+    // to the bars that actually exist).
+    const autoStart = Math.max(0, renderStart);
+    const autoEnd = Math.min(this.bars.length - 1, renderEnd);
+    const priceRange = autoscalePriceRange(this.bars, autoStart, autoEnd);
     if (priceRange) {
       this.transform.setPriceRange(priceRange);
     } else {

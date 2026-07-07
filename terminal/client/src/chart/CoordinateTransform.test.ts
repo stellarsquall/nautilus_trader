@@ -116,16 +116,37 @@ describe('CoordinateTransform', () => {
         .toThrow('Invalid bar range: start=0, end=99.7. Must be integers.');
     });
 
-    it('should throw when start is negative', () => {
-      const range: BarRange = { start: -1, end: 99 };
-      expect(() => transform.setVisibleBarRange(range))
-        .toThrow('Invalid bar range: start=-1, end=99. Must be non-negative.');
+    it('should allow negative start (right-anchored off-screen-left slots)', () => {
+      // A right-anchored viewport places the newest bar at the right edge; when
+      // the chart is sparse, the left slots map to indices < 0 (empty space).
+      const range: BarRange = { start: -26, end: 18 };
+      expect(() => transform.setVisibleBarRange(range)).not.toThrow();
+      expect(transform.getVisibleBarRange()).toEqual(range);
     });
 
-    it('should throw when end is negative', () => {
-      const range: BarRange = { start: 0, end: -5 };
-      expect(() => transform.setVisibleBarRange(range))
-        .toThrow('Invalid bar range: start=0, end=-5. Must be non-negative.');
+    it('should allow end beyond the last bar (empty trailing slots)', () => {
+      const range: BarRange = { start: 0, end: 99 };
+      expect(() => transform.setVisibleBarRange(range)).not.toThrow();
+      expect(transform.getVisibleBarRange()).toEqual(range);
+    });
+  });
+
+  describe('right-anchored viewport (sparse chart)', () => {
+    it('places the newest bar flush against the right edge with empty space on the left', () => {
+      // Canvas 800 wide, margins left/right 60/60 -> chartWidth 680.
+      // A 45-slot window right-anchored on a 19-bar chart: renderStart = -26.
+      const transform = new CoordinateTransform(800, 600, validMargins);
+      transform.setVisibleBarRange({ start: -26, end: 18 });
+
+      const chartRight = validMargins.left + transform.getChartWidth();
+      const barWidth = transform.getBarWidth();
+      const lastBarX = transform.barIndexToX(18); // newest bar
+      const firstBarX = transform.barIndexToX(0); // oldest bar
+
+      // Newest bar sits within one bar-width of the right edge.
+      expect(chartRight - lastBarX).toBeLessThanOrEqual(barWidth);
+      // Oldest bar is pushed to the right portion (empty space on the left).
+      expect(firstBarX).toBeGreaterThan(validMargins.left + transform.getChartWidth() / 2);
     });
   });
 
@@ -285,14 +306,14 @@ describe('CoordinateTransform', () => {
       expect(barWidth).toBe(2);
     });
 
-    it('should clamp bar width to maximum 20px', () => {
+    it('should NOT cap bar width (slots fill the chart width)', () => {
       const transform = new CoordinateTransform(800, 600, validMargins);
       const barRange: BarRange = { start: 0, end: 9 };
       transform.setVisibleBarRange(barRange);
       const barWidth = transform.getBarWidth();
-      // chartWidth = 720, visibleBarCount = 10, rawWidth = 72
-      // Clamped to 20px
-      expect(barWidth).toBe(20);
+      // chartWidth = 720, visibleBarCount = 10, rawWidth = 72.
+      // No maximum cap: 10 slots exactly fill the 720px chart width.
+      expect(barWidth).toBe(72);
     });
   });
 

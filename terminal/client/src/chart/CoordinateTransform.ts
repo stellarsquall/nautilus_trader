@@ -170,16 +170,15 @@ export class CoordinateTransform {
         `Invalid bar range: start=${range.start}, end=${range.end}. Must be integers.`
       );
     }
-    if (range.start < 0 || range.end < 0) {
-      throw new Error(
-        `Invalid bar range: start=${range.start}, end=${range.end}. Must be non-negative.`
-      );
-    }
     if (range.start > range.end) {
       throw new Error(
         `Invalid bar range: start=${range.start}, end=${range.end}. Start must be <= end.`
       );
     }
+    // Note: start may be negative and end may exceed bars.length - 1. This is
+    // intentional: a right-anchored viewport places the newest bar at the right
+    // edge, so when the chart holds fewer bars than the visible window, the
+    // left slots map to indices < 0 (empty space). Callers cull missing bars.
     this.visibleBarRange = range;
   }
 
@@ -292,11 +291,13 @@ export class CoordinateTransform {
    * Get bar width in pixels.
    *
    * Computed as chartWidth / visibleBarCount, clamped to [2, 20] pixels.
-   * Clamping ensures bars are always visible (minimum 2px) and not excessively
-   * wide (maximum 20px). If clamped, bars may overlap (at 2px minimum) or have
-   * gaps (at 20px maximum).
+   * Clamping ensures bars are always at least 2px wide (avoids sub-pixel
+   * rendering). There is no maximum: `visibleCount` slots always exactly fill
+   * the chart width, so a right-anchored viewport (negative start) places the
+   * newest bar flush against the right edge with empty space on the left when
+   * the chart holds fewer bars than the visible window.
    *
-   * @returns Bar width in pixels (clamped to [2, 20])
+   * @returns Bar width in pixels (minimum 2px)
    * @throws Error if visibleBarRange is not set (null)
    */
   public getBarWidth(): number {
@@ -309,8 +310,8 @@ export class CoordinateTransform {
 
     const rawWidth = chartWidth / visibleBarCount;
 
-    // Clamp to [2, 20] pixels
-    return Math.max(2, Math.min(20, rawWidth));
+    // Minimum 2px so bars never vanish; no maximum so slots fill the width.
+    return Math.max(2, rawWidth);
   }
 
   /**
