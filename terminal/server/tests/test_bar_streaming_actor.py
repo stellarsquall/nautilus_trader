@@ -33,7 +33,27 @@ except ImportError:
 if not DEPENDENCIES_AVAILABLE:
     pytest.skip("Required dependencies not available (msgspec)", allow_module_level=True)
 
-# Mock NautilusTrader modules before importing our actor
+# Mock NautilusTrader modules before importing our actor.
+#
+# Import-order independence: another test file (e.g. test_backtest.py) may have
+# already imported the REAL nautilus_trader and cached bar_streaming_actor bound
+# to the real Cython Actor (whose .log is a read-only property, so the
+# `actor.log = MagicMock()` lines below would raise AttributeError). We therefore
+# (1) save whatever is currently in sys.modules for the names we shadow, (2)
+# install the mocks, (3) force a fresh import of bar_streaming_actor under the
+# mocks, and (4) restore the originals in teardown_module so these mocks never
+# leak into other test files.
+_SHADOWED_MODULE_NAMES = (
+    "nautilus_trader",
+    "nautilus_trader.common",
+    "nautilus_trader.common.actor",
+    "nautilus_trader.config",
+    "nautilus_trader.model",
+    "nautilus_trader.model.data",
+    "terminal.server.bar_streaming_actor",
+)
+_SAVED_MODULES = {name: sys.modules.get(name) for name in _SHADOWED_MODULE_NAMES}
+
 sys.modules["nautilus_trader"] = MagicMock()
 sys.modules["nautilus_trader.common"] = MagicMock()
 sys.modules["nautilus_trader.common.actor"] = MagicMock()
@@ -56,8 +76,26 @@ class MockActorConfigBase(msgspec.Struct, kw_only=True, frozen=True):
 sys.modules["nautilus_trader.common.actor"].Actor = MockActorBase
 sys.modules["nautilus_trader.config"].ActorConfig = MockActorConfigBase
 
+# Force a fresh import under the mocked base, even if another test file already
+# imported bar_streaming_actor against the real nautilus_trader.
+sys.modules.pop("terminal.server.bar_streaming_actor", None)
+
 from terminal.server.bar_streaming_actor import BarStreamingActor
 from terminal.server.bar_streaming_actor import BarStreamingActorConfig
+
+
+def teardown_module(module):  # noqa: ARG001
+    """Restore sys.modules so the NautilusTrader mocks don't leak to other files.
+
+    Without this, the MagicMock nautilus_trader modules (and the mock-based
+    bar_streaming_actor) would remain in sys.modules and could shadow the real
+    ones for any test file that imports them after this one.
+    """
+    for name, original in _SAVED_MODULES.items():
+        if original is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
 
 
 # Mock Bar class for testing (mimics nautilus_trader.model.data.Bar structure)
