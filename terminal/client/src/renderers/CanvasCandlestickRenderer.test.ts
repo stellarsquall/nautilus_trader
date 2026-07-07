@@ -1,6 +1,58 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CanvasCandlestickRenderer } from './CanvasCandlestickRenderer';
 import type { BarPayload } from '../types';
+import { ChartViewState } from '../chart/ChartViewState';
+import { InteractionController } from '../chart/InteractionController';
+import { CrosshairOverlay } from '../chart/CrosshairOverlay';
+import { ResetToLatestButton } from '../chart/ResetToLatestButton';
+
+// Mock the interaction components
+vi.mock('../chart/ChartViewState', () => {
+  return {
+    ChartViewState: vi.fn().mockImplementation(() => ({
+      getState: vi.fn().mockReturnValue({
+        visibleStart: 0,
+        visibleCount: 100,
+        followLatest: true,
+      }),
+      setTotalBars: vi.fn(),
+      onNewBar: vi.fn(),
+      pan: vi.fn(),
+      zoom: vi.fn(),
+      resetToLatest: vi.fn(),
+      isAtTail: vi.fn().mockReturnValue(true),
+    })),
+  };
+});
+
+vi.mock('../chart/InteractionController', () => {
+  return {
+    InteractionController: vi.fn().mockImplementation(() => ({
+      destroy: vi.fn(),
+    })),
+  };
+});
+
+vi.mock('../chart/CrosshairOverlay', () => {
+  return {
+    CrosshairOverlay: vi.fn().mockImplementation(() => ({
+      show: vi.fn(),
+      hide: vi.fn(),
+      setBars: vi.fn(),
+      updateDimensions: vi.fn(),
+      destroy: vi.fn(),
+    })),
+  };
+});
+
+vi.mock('../chart/ResetToLatestButton', () => {
+  return {
+    ResetToLatestButton: vi.fn().mockImplementation(() => ({
+      updateVisibility: vi.fn(),
+      destroy: vi.fn(),
+    })),
+  };
+});
 
 // Mock 2D rendering context
 const createMockContext = () => ({
@@ -342,6 +394,363 @@ describe('CanvasCandlestickRenderer', () => {
       // Bars array should be cleared
       const bars = (renderer as any).bars as BarPayload[];
       expect(bars.length).toBe(0);
+    });
+  });
+
+  describe('Integration with view-state and interactions', () => {
+    it('should instantiate ChartViewState with initialTotalBars=0 and VISIBLE_BARS=100', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      expect(ChartViewState).toHaveBeenCalledWith(0, 100);
+
+      renderer.destroy();
+    });
+
+    it('should instantiate CrosshairOverlay with container and transform', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      expect(CrosshairOverlay).toHaveBeenCalledWith(
+        container,
+        expect.anything() // transform
+      );
+
+      renderer.destroy();
+    });
+
+    it('should instantiate InteractionController with correct callbacks', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      expect(InteractionController).toHaveBeenCalledWith(
+        expect.any(HTMLCanvasElement), // canvas
+        expect.anything(), // transform
+        expect.anything(), // viewState
+        expect.objectContaining({
+          onViewChanged: expect.any(Function),
+          onMouseMove: expect.any(Function),
+          onMouseLeave: expect.any(Function),
+        })
+      );
+
+      renderer.destroy();
+    });
+
+    it('should instantiate ResetToLatestButton with correct callbacks', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      expect(ResetToLatestButton).toHaveBeenCalledWith(
+        container,
+        expect.anything(), // viewState
+        expect.objectContaining({
+          onReset: expect.any(Function),
+        })
+      );
+
+      renderer.destroy();
+    });
+
+    it('should call viewState.getState() in updateTransformRanges()', () => {
+      const mockGetState = vi.fn().mockReturnValue({
+        visibleStart: 0,
+        visibleCount: 100,
+        followLatest: true,
+      });
+
+      // @ts-ignore - Mock implementation
+      ChartViewState.mockImplementation(() => ({
+        getState: mockGetState,
+        setTotalBars: vi.fn(),
+        onNewBar: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      // Add a bar to trigger updateTransformRanges
+      const bar: BarPayload = {
+        ts_event: 1000,
+        open: 0.67,
+        high: 0.671,
+        low: 0.669,
+        close: 0.670,
+        volume: 100,
+      };
+
+      renderer.update(bar);
+
+      // Verify getState was called (at least once for updateTransformRanges)
+      expect(mockGetState).toHaveBeenCalled();
+
+      renderer.destroy();
+    });
+
+    it('should call setTotalBars() and onNewBar() when update() receives a new bar', () => {
+      const mockSetTotalBars = vi.fn();
+      const mockOnNewBar = vi.fn();
+      const mockGetState = vi.fn().mockReturnValue({
+        visibleStart: 0,
+        visibleCount: 100,
+        followLatest: true,
+      });
+
+      // @ts-ignore - Mock implementation
+      ChartViewState.mockImplementation(() => ({
+        getState: mockGetState,
+        setTotalBars: mockSetTotalBars,
+        onNewBar: mockOnNewBar,
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      const bar: BarPayload = {
+        ts_event: 1000,
+        open: 0.67,
+        high: 0.671,
+        low: 0.669,
+        close: 0.670,
+        volume: 100,
+      };
+
+      renderer.update(bar);
+
+      expect(mockSetTotalBars).toHaveBeenCalledWith(1);
+      expect(mockOnNewBar).toHaveBeenCalledWith(1);
+
+      renderer.destroy();
+    });
+
+    it('should call crosshairOverlay.setBars() when update() receives a bar', () => {
+      const mockSetBars = vi.fn();
+
+      // @ts-ignore - Mock implementation
+      CrosshairOverlay.mockImplementation(() => ({
+        setBars: mockSetBars,
+        show: vi.fn(),
+        hide: vi.fn(),
+        updateDimensions: vi.fn(),
+        destroy: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      const bar: BarPayload = {
+        ts_event: 1000,
+        open: 0.67,
+        high: 0.671,
+        low: 0.669,
+        close: 0.670,
+        volume: 100,
+      };
+
+      renderer.update(bar);
+
+      expect(mockSetBars).toHaveBeenCalled();
+
+      renderer.destroy();
+    });
+
+    it('should call resetButton.updateVisibility() when update() receives a bar', () => {
+      const mockUpdateVisibility = vi.fn();
+
+      // @ts-ignore - Mock implementation
+      ResetToLatestButton.mockImplementation(() => ({
+        updateVisibility: mockUpdateVisibility,
+        destroy: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      const bar: BarPayload = {
+        ts_event: 1000,
+        open: 0.67,
+        high: 0.671,
+        low: 0.669,
+        close: 0.670,
+        volume: 100,
+      };
+
+      renderer.update(bar);
+
+      expect(mockUpdateVisibility).toHaveBeenCalled();
+
+      renderer.destroy();
+    });
+
+    it('should call crosshairOverlay.updateDimensions() on resize', () => {
+      const mockUpdateDimensions = vi.fn();
+
+      // @ts-ignore - Mock implementation
+      CrosshairOverlay.mockImplementation(() => ({
+        setBars: vi.fn(),
+        show: vi.fn(),
+        hide: vi.fn(),
+        updateDimensions: mockUpdateDimensions,
+        destroy: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      // Trigger resize via ResizeObserver callback
+      const resizeObserver = (renderer as any).resizeObserver;
+      const resizeCallback = resizeObserver.observe.mock.calls[0];
+
+      // Simulate resize
+      (renderer as any).handleResize(900, 700);
+
+      expect(mockUpdateDimensions).toHaveBeenCalledWith(900, 700);
+
+      renderer.destroy();
+    });
+
+    it('should call destroy() on all four components when renderer is destroyed', () => {
+      const mockInteractionDestroy = vi.fn();
+      const mockCrosshairDestroy = vi.fn();
+      const mockResetButtonDestroy = vi.fn();
+
+      // @ts-ignore - Mock implementations
+      InteractionController.mockImplementation(() => ({
+        destroy: mockInteractionDestroy,
+      }));
+
+      // @ts-ignore - Mock implementations
+      CrosshairOverlay.mockImplementation(() => ({
+        setBars: vi.fn(),
+        show: vi.fn(),
+        hide: vi.fn(),
+        updateDimensions: vi.fn(),
+        destroy: mockCrosshairDestroy,
+      }));
+
+      // @ts-ignore - Mock implementations
+      ResetToLatestButton.mockImplementation(() => ({
+        updateVisibility: vi.fn(),
+        destroy: mockResetButtonDestroy,
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+      renderer.destroy();
+
+      expect(mockInteractionDestroy).toHaveBeenCalled();
+      expect(mockCrosshairDestroy).toHaveBeenCalled();
+      expect(mockResetButtonDestroy).toHaveBeenCalled();
+    });
+
+    it('should trigger updateTransformRanges when InteractionController onViewChanged callback is called', () => {
+      let onViewChangedCallback: (() => void) | null = null;
+
+      // @ts-ignore - Mock implementation to capture callback
+      InteractionController.mockImplementation((canvas, transform, viewState, callbacks) => {
+        onViewChangedCallback = callbacks.onViewChanged;
+        return {
+          destroy: vi.fn(),
+        };
+      });
+
+      const mockGetState = vi.fn().mockReturnValue({
+        visibleStart: 0,
+        visibleCount: 100,
+        followLatest: false,
+      });
+
+      // @ts-ignore - Mock implementation
+      ChartViewState.mockImplementation(() => ({
+        getState: mockGetState,
+        setTotalBars: vi.fn(),
+        onNewBar: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      // Add a bar first so updateTransformRanges has data
+      const bar: BarPayload = {
+        ts_event: 1000,
+        open: 0.67,
+        high: 0.671,
+        low: 0.669,
+        close: 0.670,
+        volume: 100,
+      };
+      renderer.update(bar);
+
+      // Clear previous calls
+      mockGetState.mockClear();
+
+      // Trigger the onViewChanged callback
+      expect(onViewChangedCallback).not.toBeNull();
+      onViewChangedCallback!();
+
+      // Verify getState was called again (by updateTransformRanges)
+      expect(mockGetState).toHaveBeenCalled();
+
+      renderer.destroy();
+    });
+
+    it('should trigger crosshairOverlay.show when InteractionController onMouseMove callback is called', () => {
+      let onMouseMoveCallback: ((canvasX: number, canvasY: number, barIndex: number) => void) | null = null;
+
+      // @ts-ignore - Mock implementation to capture callback
+      InteractionController.mockImplementation((canvas, transform, viewState, callbacks) => {
+        onMouseMoveCallback = callbacks.onMouseMove;
+        return {
+          destroy: vi.fn(),
+        };
+      });
+
+      const mockShow = vi.fn();
+
+      // @ts-ignore - Mock implementation
+      CrosshairOverlay.mockImplementation(() => ({
+        setBars: vi.fn(),
+        show: mockShow,
+        hide: vi.fn(),
+        updateDimensions: vi.fn(),
+        destroy: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      // Trigger the onMouseMove callback
+      expect(onMouseMoveCallback).not.toBeNull();
+      onMouseMoveCallback!(100, 200, 5);
+
+      expect(mockShow).toHaveBeenCalledWith({
+        canvasX: 100,
+        canvasY: 200,
+        barIndex: 5,
+      });
+
+      renderer.destroy();
+    });
+
+    it('should trigger crosshairOverlay.hide when InteractionController onMouseLeave callback is called', () => {
+      let onMouseLeaveCallback: (() => void) | null = null;
+
+      // @ts-ignore - Mock implementation to capture callback
+      InteractionController.mockImplementation((canvas, transform, viewState, callbacks) => {
+        onMouseLeaveCallback = callbacks.onMouseLeave;
+        return {
+          destroy: vi.fn(),
+        };
+      });
+
+      const mockHide = vi.fn();
+
+      // @ts-ignore - Mock implementation
+      CrosshairOverlay.mockImplementation(() => ({
+        setBars: vi.fn(),
+        show: vi.fn(),
+        hide: mockHide,
+        updateDimensions: vi.fn(),
+        destroy: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      // Trigger the onMouseLeave callback
+      expect(onMouseLeaveCallback).not.toBeNull();
+      onMouseLeaveCallback!();
+
+      expect(mockHide).toHaveBeenCalled();
+
+      renderer.destroy();
     });
   });
 });
