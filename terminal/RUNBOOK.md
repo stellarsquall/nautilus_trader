@@ -103,24 +103,30 @@ server and `/ws` protocol are untouched.
 
 | # | Action | Expected | Pass? |
 |---|--------|----------|-------|
-| I | **Drag left** (mouse down on chart, move left, release) | View pans back to **older** bars | ☐ |
-| J | **Drag right** back toward the newest bar | View scrolls toward the **tail** | ☐ |
-| K | **Wheel up / down** over the chart | Time axis **zooms** (fewer / more visible bars) | ☐ |
+| I | **Click-drag left** (mouse down on chart, move left, release) | Cursor shows **grab → grabbing**; view pans back to **older** bars. Works even if you release the button **off** the chart | ☐ |
+| J | **Click-drag right** back toward the newest bar | View scrolls toward the **tail** | ☐ |
+| K | **Two-finger vertical scroll** (or mouse wheel) over the chart | Time axis **zooms smoothly** (fewer / more visible bars) — no stutter | ☐ |
+| K2 | **Pinch** (trackpad) over the chart | Time axis **zooms smoothly**, same as vertical scroll | ☐ |
+| K3 | **Two-finger horizontal scroll** over the chart | View **pans** through time (scrubs older / newer) | ☐ |
 | L | Zoom while pointing at a specific bar | The bar **under the cursor stays under the cursor** (cursor-anchored) | ☐ |
-| M | Keep zooming in, then out | Zoom **clamps** at min (20 bars) and max (500 bars) — no runaway | ☐ |
+| M | Keep zooming **in** | Zoom **clamps** at min (20 bars) — no runaway single giant candle | ☐ |
+| M2 | Keep zooming **out** | Stops when **all available bars fill the width** — no empty padding on the left (capped at the data you have, max 500) | ☐ |
 | N | Move the mouse over the chart | **Crosshair** appears: vertical + horizontal lines, price label (y-axis), time label (x-axis), and an **OHLC readout** box for the hovered bar | ☐ |
 | O | Move the mouse off the chart | Crosshair **hides** | ☐ |
-| P | Fresh load, don't touch anything | Chart **auto-follows** the latest bar as new bars stream in | ☐ |
+| P | Fresh load, don't touch anything | Chart **auto-follows** the latest bar (newest bar hugs the **right edge**) as new bars stream in | ☐ |
 | Q | Pan away from the tail | A **“Latest”** reset button appears (top-right) | ☐ |
 | R | While panned away, let new bars arrive | The view does **NOT** jump — auto-follow is paused | ☐ |
 | S | Click **“Latest”** | View snaps to the tail, follow resumes, button hides | ☐ |
 | T | Pan / zoom across regions of different price | Y-axis **autoscales to the visible window** (price labels track the bars on screen) | ☐ |
 
-> Mechanism: a pure `ChartViewState` module owns the visible window + follow flag;
-> `InteractionController` translates mouse/wheel events into pan/zoom (reusing
-> `CoordinateTransform` inverse maps for cursor-anchoring); a separate overlay `<canvas>`
-> renders the crosshair without redrawing the main chart; the price axis autoscales from
-> the visible bars each frame.
+> Mechanism: a pure `ChartViewState` module owns the visible window + follow flag (and
+> caps zoom-out at the available bar count); `InteractionController` translates
+> mouse/wheel events into pan/zoom — click-drag and horizontal scroll pan (drag listeners
+> live on `window` so a gesture survives the pointer leaving the canvas), while pinch and
+> vertical scroll do a magnitude-scaled, cursor-anchored zoom (reusing `CoordinateTransform`
+> inverse maps). The viewport is **right-anchored** (newest bar at the right edge). A
+> separate overlay `<canvas>` renders the crosshair without redrawing the main chart; the
+> price axis autoscales from the visible bars each frame.
 
 ---
 
