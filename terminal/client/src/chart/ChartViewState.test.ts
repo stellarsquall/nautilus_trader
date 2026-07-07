@@ -308,6 +308,26 @@ describe('ChartViewState', () => {
       const state = viewState.getState();
       expect(state.visibleStart).toBe(50); // Clamped to max(0, 150 - 100)
     });
+
+    it('should keep following the tail as a fresh buffer streams past visibleCount', () => {
+      // Regression: mirrors the live renderer flow (empty buffer, bars arriving
+      // one at a time via onNewBar only). Before the fix, the renderer also
+      // called setTotalBars() first, which pre-advanced the total and made
+      // onNewBar's at-tail check read false once totalBars exceeded visibleCount
+      // (100). visibleStart then froze at 0 while followLatest stayed true,
+      // silently breaking pan. onNewBar alone must keep advancing.
+      const viewState = new ChartViewState(0, 100);
+
+      for (let n = 1; n <= 250; n++) {
+        viewState.onNewBar(n);
+      }
+
+      const state = viewState.getState();
+      expect(state.followLatest).toBe(true);
+      expect(viewState.isAtTail()).toBe(true);
+      // Tail-anchored: newest 100 bars visible (indices 150..249).
+      expect(state.visibleStart).toBe(150);
+    });
   });
 
   describe('resetToLatest()', () => {

@@ -486,7 +486,7 @@ describe('CanvasCandlestickRenderer', () => {
       renderer.destroy();
     });
 
-    it('should call setTotalBars() and onNewBar() when update() receives a new bar', () => {
+    it('should call onNewBar() (and NOT setTotalBars) when update() receives a new bar', () => {
       const mockSetTotalBars = vi.fn();
       const mockOnNewBar = vi.fn();
       const mockGetState = vi.fn().mockReturnValue({
@@ -515,8 +515,12 @@ describe('CanvasCandlestickRenderer', () => {
 
       renderer.update(bar);
 
-      expect(mockSetTotalBars).toHaveBeenCalledWith(1);
+      // onNewBar() is the single source of truth: it updates the total AND
+      // advances the follow window. setTotalBars() must NOT be called here (a
+      // redundant pre-advance corrupts onNewBar's at-tail check and freezes
+      // visibleStart at 0, breaking pan once the buffer exceeds visibleCount).
       expect(mockOnNewBar).toHaveBeenCalledWith(1);
+      expect(mockSetTotalBars).not.toHaveBeenCalled();
 
       renderer.destroy();
     });

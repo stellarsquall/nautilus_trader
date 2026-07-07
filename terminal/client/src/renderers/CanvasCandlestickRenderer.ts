@@ -198,10 +198,13 @@ export class CanvasCandlestickRenderer implements Renderer {
       }
     }
 
-    // Update view-state with new total bar count
-    this.viewState.setTotalBars(this.bars.length);
-
-    // If in auto-follow mode, notify view-state to advance window
+    // Notify the view-state of the new bar. onNewBar() updates the total bar
+    // count AND advances the follow window when at the tail. It must be the ONLY
+    // total-count update here: it decides whether to advance by comparing the
+    // window against the PREVIOUS total, so calling setTotalBars() first (which
+    // pre-advances the total) would make onNewBar believe it is no longer at the
+    // tail once the buffer exceeds visibleCount, freezing visibleStart at 0
+    // while followLatest stays true (breaking pan).
     this.viewState.onNewBar(this.bars.length);
 
     // Share the updated bar buffer with the panes and crosshair.
