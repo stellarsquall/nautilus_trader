@@ -181,8 +181,15 @@ When the slice-2 canvas checks (A–H) **and** the slice-3 interaction checks (I
 the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
 
 **Slice 3 (chart interactions) sign-off:**
-- Verified by: _______  Date: _______  Browser / OS: _______
-- Interaction checks: I ☐ J ☐ K ☐ L ☐ M ☐ N ☐ O ☐ P ☐ Q ☐ R ☐ S ☐ T ☐
+- Verified by: user + assistant (paired)   Date: 2026-07-06   Browser / OS: Chrome / macOS
+- Interaction checks: I ☑ J ☑ K ☑ L ☑ M ☑ N ☑ O ☑ P ☑ Q ☑ R ☑ S ☑ T ☑
+
+**Notes:** Verified from a live run after the right-anchor viewport + interaction-polish
+pass. Click-drag pan (grab/grabbing cursor, survives leaving the canvas), two-finger
+horizontal-scroll pan, pinch + two-finger-vertical smooth cursor-anchored zoom, zoom-out
+capped at available bars (fills width, no empty-left padding), right-anchored viewport
+(newest bar at right edge), crosshair + OHLC readout, auto-follow with Latest reset, and
+visible-window autoscale all confirmed. Client-only — server and `/ws` protocol untouched.
 
 ---
 
