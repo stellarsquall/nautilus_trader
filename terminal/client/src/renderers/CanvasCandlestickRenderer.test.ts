@@ -39,6 +39,7 @@ vi.mock('../chart/CrosshairOverlay', () => {
       show: vi.fn(),
       hide: vi.fn(),
       setBars: vi.fn(),
+      setValueResolver: vi.fn(),
       updateDimensions: vi.fn(),
       destroy: vi.fn(),
     })),
@@ -70,6 +71,9 @@ const createMockContext = () => ({
   scale: vi.fn(),
   save: vi.fn(),
   restore: vi.fn(),
+  clip: vi.fn(),
+  rect: vi.fn(),
+  setTransform: vi.fn(),
   fillStyle: '',
   strokeStyle: '',
   lineWidth: 1,
@@ -525,6 +529,7 @@ describe('CanvasCandlestickRenderer', () => {
         setBars: mockSetBars,
         show: vi.fn(),
         hide: vi.fn(),
+        setValueResolver: vi.fn(),
         updateDimensions: vi.fn(),
         destroy: vi.fn(),
       }));
@@ -582,6 +587,7 @@ describe('CanvasCandlestickRenderer', () => {
         setBars: vi.fn(),
         show: vi.fn(),
         hide: vi.fn(),
+        setValueResolver: vi.fn(),
         updateDimensions: mockUpdateDimensions,
         destroy: vi.fn(),
       }));
@@ -615,6 +621,7 @@ describe('CanvasCandlestickRenderer', () => {
         setBars: vi.fn(),
         show: vi.fn(),
         hide: vi.fn(),
+        setValueResolver: vi.fn(),
         updateDimensions: vi.fn(),
         destroy: mockCrosshairDestroy,
       }));
@@ -701,6 +708,7 @@ describe('CanvasCandlestickRenderer', () => {
         setBars: vi.fn(),
         show: mockShow,
         hide: vi.fn(),
+        setValueResolver: vi.fn(),
         updateDimensions: vi.fn(),
         destroy: vi.fn(),
       }));
@@ -738,6 +746,7 @@ describe('CanvasCandlestickRenderer', () => {
         setBars: vi.fn(),
         show: vi.fn(),
         hide: mockHide,
+        setValueResolver: vi.fn(),
         updateDimensions: vi.fn(),
         destroy: vi.fn(),
       }));

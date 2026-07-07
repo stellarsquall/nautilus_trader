@@ -211,6 +211,18 @@ export class PaneLayout {
   }
 
   /**
+   * Get the shared horizontal (bar-index -> X) coordinate transform.
+   *
+   * The renderer passes this to the InteractionController (pan/zoom hit-testing)
+   * and CrosshairOverlay so every pane and the interaction layer agree on one
+   * time axis. PaneLayout keeps its visible bar range current each frame in
+   * render().
+   */
+  public getHorizontalTransform(): CoordinateTransform {
+    return this.horizontalTransform;
+  }
+
+  /**
    * Find which pane contains a Y coordinate.
    *
    * Used by CrosshairOverlay for per-pane value readout.

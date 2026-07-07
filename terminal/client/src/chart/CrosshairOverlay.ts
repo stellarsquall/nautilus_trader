@@ -24,6 +24,12 @@ export class CrosshairOverlay {
   // Bar data reference (for OHLC readout)
   private bars: BarPayload[] = [];
 
+  // Optional per-pane value resolver. In multi-pane mode the renderer sets this
+  // so the right-margin value label shows the value of the pane under the cursor
+  // (price in the candlestick pane, volume in the volume pane). When null, the
+  // label falls back to the single price transform (yToPrice).
+  private valueResolver: ((y: number) => string | null) | null = null;
+
   // Canvas dimensions
   private canvasWidth = 0;
   private canvasHeight = 0;
@@ -94,6 +100,17 @@ export class CrosshairOverlay {
    */
   public setBars(bars: BarPayload[]): void {
     this.bars = bars;
+  }
+
+  /**
+   * Set (or clear) the per-pane value resolver used for the right-margin label.
+   *
+   * @param fn - Maps a canvas Y to a formatted value string (or null when Y is
+   *   outside every pane, suppressing the label). Pass null to restore the
+   *   default single-transform (yToPrice) behavior.
+   */
+  public setValueResolver(fn: ((y: number) => string | null) | null): void {
+    this.valueResolver = fn;
   }
 
   /**
@@ -188,9 +205,19 @@ export class CrosshairOverlay {
   private drawPriceLabel(y: number): void {
     this.ctx.save();
 
-    // Convert Y to price
-    const price = this.transform.yToPrice(y);
-    const priceText = formatPrice(price);
+    // Resolve the label text: per-pane value in multi-pane mode, else price.
+    let priceText: string;
+    if (this.valueResolver) {
+      const resolved = this.valueResolver(y);
+      if (resolved === null) {
+        // Cursor is outside every pane -> no value label.
+        this.ctx.restore();
+        return;
+      }
+      priceText = resolved;
+    } else {
+      priceText = formatPrice(this.transform.yToPrice(y));
+    }
 
     // Measure text
     this.ctx.font = '12px sans-serif';

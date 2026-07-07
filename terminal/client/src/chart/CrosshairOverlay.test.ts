@@ -463,4 +463,54 @@ describe('CrosshairOverlay', () => {
       expect(mockContext.lineTo).toHaveBeenCalledWith(720, 300); // horizontal line end
     });
   });
+
+  describe('per-pane value resolver (multi-pane mode)', () => {
+    it('should use the resolver for the value label instead of yToPrice', () => {
+      const resolver = vi.fn((_y: number) => '1234');
+      overlay.setValueResolver(resolver);
+
+      const yToPriceSpy = vi.spyOn(transform, 'yToPrice');
+
+      overlay.show({ canvasX: 400, canvasY: 300, barIndex: 1 });
+
+      // Resolver is consulted with the cursor Y, and its text is drawn...
+      expect(resolver).toHaveBeenCalledWith(300);
+      const drewResolved = mockContext.fillText.mock.calls.some(
+        (c) => c[0] === '1234'
+      );
+      expect(drewResolved).toBe(true);
+      // ...and the single-transform fallback is NOT used for the label.
+      expect(yToPriceSpy).not.toHaveBeenCalled();
+    });
+
+    it('should suppress the value label when the resolver returns null', () => {
+      // Simulate the cursor being outside every pane.
+      overlay.setValueResolver(() => null);
+
+      overlay.show({ canvasX: 400, canvasY: 300, barIndex: 1 });
+
+      // Crosshair lines still draw...
+      expect(mockContext.moveTo).toHaveBeenCalledWith(400, 20);
+      // ...but no value label box is painted for the right margin. The only
+      // strokeRect calls (if any) would come from the value box; with a null
+      // resolver the label bails before drawing its box.
+      // (OHLC readout uses fillRect, not the value-label path.)
+      expect(mockContext.strokeRect).not.toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.any(Number),
+        expect.any(Number),
+        16
+      );
+    });
+
+    it('should restore the default yToPrice label when resolver is cleared', () => {
+      overlay.setValueResolver(() => '1234');
+      overlay.setValueResolver(null);
+
+      const yToPriceSpy = vi.spyOn(transform, 'yToPrice');
+      overlay.show({ canvasX: 400, canvasY: 300, barIndex: 1 });
+
+      expect(yToPriceSpy).toHaveBeenCalledWith(300);
+    });
+  });
 });

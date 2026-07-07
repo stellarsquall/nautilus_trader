@@ -1,20 +1,23 @@
 import type { Renderer } from './Renderer';
 import type { BarPayload } from '../types';
-import {
-  CoordinateTransform,
-  autoscalePriceRange,
-  generateNiceTicks,
-  formatPrice,
-  formatTime,
-  type PriceRange,
-  type BarRange,
-  type AxisMargins,
-} from '../chart/CoordinateTransform';
+import { formatPrice, type BarRange } from '../chart/CoordinateTransform';
 import { ChartViewState } from '../chart/ChartViewState';
 import { InteractionController } from '../chart/InteractionController';
 import { CrosshairOverlay } from '../chart/CrosshairOverlay';
 import { ResetToLatestButton } from '../chart/ResetToLatestButton';
+import { PaneLayout } from '../chart/PaneLayout';
+import { CandlestickPane } from '../chart/CandlestickPane';
+import { VolumePane } from '../chart/VolumePane';
 
+/**
+ * CanvasCandlestickRenderer: the app-facing Renderer.
+ *
+ * Composes a multi-pane layout — a candlestick (price) pane over a delta-colored
+ * volume pane — sharing one horizontal (time) coordinate transform and a single
+ * ChartViewState. The renderer owns the canvas, the DPR/resize plumbing, the
+ * RAF-batched draw, and the interaction stack (pan/zoom, crosshair, Latest reset);
+ * PaneLayout owns the per-pane drawing and the shared horizontal transform.
+ */
 export class CanvasCandlestickRenderer implements Renderer {
   // Canvas and context
   private canvas: HTMLCanvasElement;
@@ -26,8 +29,9 @@ export class CanvasCandlestickRenderer implements Renderer {
   private readonly MAX_BARS = 1000;
   private readonly VISIBLE_BARS = 100;
 
-  // Coordinate transform
-  private transform: CoordinateTransform;
+  // Multi-pane layout (candlestick + volume) sharing one horizontal transform
+  private paneLayout: PaneLayout;
+  private currentVisibleRange: BarRange = { start: 0, end: 0 };
 
   // ResizeObserver and devicePixelRatio tracking
   private resizeObserver: ResizeObserver;
@@ -43,22 +47,11 @@ export class CanvasCandlestickRenderer implements Renderer {
   private crosshairOverlay: CrosshairOverlay;
   private resetButton: ResetToLatestButton;
 
-  // Axis margin configuration (pixels)
-  private static readonly MARGINS: AxisMargins = {
-    top: 20,
-    right: 80,
-    bottom: 40,
-    left: 0,
-  };
+  // Vertical split: candlestick pane 75%, volume pane 25%
+  private static readonly PANE_HEIGHT_FRACTIONS = [0.75, 0.25];
 
-  // Visual constants (matching slice 1)
-  private static readonly COLOR_UP = '#26a69a';
-  private static readonly COLOR_DOWN = '#ef5350';
-  private static readonly COLOR_GRID = '#e0e0e0';
-  private static readonly COLOR_TEXT = '#333333';
-  private static readonly COLOR_LAST_PRICE = '#333333';
+  // Visual constants
   private static readonly COLOR_BACKGROUND = '#ffffff';
-  private static readonly COLOR_AXIS_BG = '#f5f5f5';
 
   // Canvas size limits (backing store, not CSS size)
   private static readonly MAX_CANVAS_DIMENSION = 4096;
@@ -92,17 +85,20 @@ export class CanvasCandlestickRenderer implements Renderer {
       );
     }
 
-    // Initialize transform with container dimensions
-    this.transform = new CoordinateTransform(
-      containerWidth,
-      containerHeight,
-      CanvasCandlestickRenderer.MARGINS
-    );
-
     // Track current DPR
     this.currentDPR = window.devicePixelRatio || 1;
 
-    // Size canvas
+    // Compose the multi-pane layout: candlestick (price) over volume.
+    const candlestickPane = new CandlestickPane(containerWidth, containerHeight);
+    const volumePane = new VolumePane(containerWidth, containerHeight);
+    this.paneLayout = new PaneLayout(
+      [candlestickPane, volumePane],
+      CanvasCandlestickRenderer.PANE_HEIGHT_FRACTIONS,
+      containerWidth,
+      containerHeight
+    );
+
+    // Size canvas (also lays out panes)
     this.resizeCanvas(containerWidth, containerHeight);
 
     // Set up ResizeObserver
@@ -118,18 +114,31 @@ export class CanvasCandlestickRenderer implements Renderer {
     // Initialize view-state (initially 0 bars, will update on first bar)
     this.viewState = new ChartViewState(0, this.VISIBLE_BARS);
 
-    // Create crosshair overlay
-    this.crosshairOverlay = new CrosshairOverlay(this.container, this.transform);
+    // The interaction layer and crosshair share the one horizontal (time) transform.
+    const horizontalTransform = this.paneLayout.getHorizontalTransform();
 
-    // Create interaction controller with callbacks
+    // Create crosshair overlay
+    this.crosshairOverlay = new CrosshairOverlay(this.container, horizontalTransform);
+    // Per-pane value readout: price in the candle pane, integer volume in the
+    // volume pane (null suppresses the label when the cursor is off the panes).
+    this.crosshairOverlay.setValueResolver((y: number): string | null => {
+      const resolved = this.paneLayout.yToValue(y);
+      if (!resolved) return null;
+      return resolved.paneIndex === 0
+        ? formatPrice(resolved.value)
+        : Math.round(resolved.value).toString();
+    });
+
+    // Create interaction controller with callbacks (drives the SHARED x-axis, so
+    // pan/zoom move every pane in lockstep).
     this.interactionController = new InteractionController(
       this.canvas,
-      this.transform,
+      horizontalTransform,
       this.viewState,
       {
         onViewChanged: () => {
-          this.updateTransformRanges(); // Recompute transform ranges from view-state
-          this.scheduleRedraw(); // Redraw main chart
+          this.updateVisibleRange(); // Recompute the visible window from view-state
+          this.scheduleRedraw(); // Redraw all panes
           this.resetButton.updateVisibility(); // Update button visibility
         },
         onMouseMove: (canvasX, canvasY, barIndex) => {
@@ -144,7 +153,7 @@ export class CanvasCandlestickRenderer implements Renderer {
     // Create reset-to-latest button
     this.resetButton = new ResetToLatestButton(this.container, this.viewState, {
       onReset: () => {
-        this.updateTransformRanges();
+        this.updateVisibleRange();
         this.scheduleRedraw();
         this.resetButton.updateVisibility();
       },
@@ -195,11 +204,12 @@ export class CanvasCandlestickRenderer implements Renderer {
     // If in auto-follow mode, notify view-state to advance window
     this.viewState.onNewBar(this.bars.length);
 
-    // Update crosshair overlay's bar reference
+    // Share the updated bar buffer with the panes and crosshair.
+    this.paneLayout.setBars(this.bars);
     this.crosshairOverlay.setBars(this.bars);
 
-    // Update transform ranges (view-state may have advanced)
-    this.updateTransformRanges();
+    // Recompute the visible window (view-state may have advanced)
+    this.updateVisibleRange();
 
     // Update reset button visibility (follow mode may have changed)
     this.resetButton.updateVisibility();
@@ -217,6 +227,9 @@ export class CanvasCandlestickRenderer implements Renderer {
 
     // Destroy reset button
     this.resetButton.destroy();
+
+    // Destroy panes
+    this.paneLayout.destroy();
 
     this.resizeObserver.disconnect();
 
@@ -249,38 +262,37 @@ export class CanvasCandlestickRenderer implements Renderer {
     );
   }
 
-  private updateTransformRanges(): void {
+  /**
+   * Recompute the visible bar window from the view-state and publish it to the
+   * shared horizontal transform.
+   *
+   * Right-anchors the viewport: the render window is always exactly
+   * `visibleCount` slots wide, and its right edge tracks the newest bar when
+   * following (or the panned position otherwise). renderStart may be negative
+   * and renderEnd may exceed bars.length - 1 — those slots are simply empty
+   * (each pane culls missing bars), so a sparse chart shows the latest bar flush
+   * right with empty space on the LEFT (standard trading-chart layout).
+   *
+   * Publishing the range here (not only in render()) keeps interaction
+   * hit-testing (xToBarIndex/getBarWidth) consistent between frames.
+   */
+  private updateVisibleRange(): void {
     if (this.bars.length === 0) {
       return;
     }
 
-    // Get visible window from view-state.
     const state = this.viewState.getState();
     const visibleCount = state.visibleCount;
 
-    // Right-anchor the viewport: the render window is always exactly
-    // `visibleCount` slots wide, and its right edge tracks the newest bar when
-    // following (or the panned position otherwise). renderStart may be negative
-    // and renderEnd may exceed bars.length - 1 — those slots are simply empty
-    // (drawCandles skips missing bars), so a sparse chart shows the latest bar
-    // flush right with empty space on the LEFT (standard trading-chart layout).
     const renderEnd = state.followLatest
       ? this.bars.length - 1
       : state.visibleStart + visibleCount - 1;
     const renderStart = renderEnd - visibleCount + 1;
 
-    this.transform.setVisibleBarRange({ start: renderStart, end: renderEnd });
+    this.currentVisibleRange = { start: renderStart, end: renderEnd };
 
-    // Autoscale price from the REAL visible bars only (clamp the render window
-    // to the bars that actually exist).
-    const autoStart = Math.max(0, renderStart);
-    const autoEnd = Math.min(this.bars.length - 1, renderEnd);
-    const priceRange = autoscalePriceRange(this.bars, autoStart, autoEnd);
-    if (priceRange) {
-      this.transform.setPriceRange(priceRange);
-    } else {
-      console.warn('Failed to compute price range from visible bars.');
-    }
+    // Keep the shared horizontal transform current for interaction hit-testing.
+    this.paneLayout.getHorizontalTransform().setVisibleBarRange(this.currentVisibleRange);
   }
 
   private resizeCanvas(newWidth: number, newHeight: number): void {
@@ -310,9 +322,12 @@ export class CanvasCandlestickRenderer implements Renderer {
     this.canvas.style.width = `${clampedWidth}px`;
     this.canvas.style.height = `${clampedHeight}px`;
 
+    // Assigning canvas.width/height resets the context transform, so re-apply
+    // the DPR scale (non-accumulating).
     this.ctx.scale(this.currentDPR, this.currentDPR);
 
-    this.transform.updateDimensions(clampedWidth, clampedHeight);
+    // Re-layout panes (recomputes pane rects and the shared transform dims).
+    this.paneLayout.updateLayout(clampedWidth, clampedHeight);
   }
 
   private handleResize(newWidth: number, newHeight: number): void {
@@ -321,8 +336,8 @@ export class CanvasCandlestickRenderer implements Renderer {
     // Resize crosshair overlay to match
     this.crosshairOverlay.updateDimensions(newWidth, newHeight);
 
-    // Recompute transform ranges (chart dimensions changed)
-    this.updateTransformRanges();
+    // Recompute the visible window (chart dimensions changed)
+    this.updateVisibleRange();
 
     this.scheduleRedraw();
   }
@@ -342,206 +357,19 @@ export class CanvasCandlestickRenderer implements Renderer {
   }
 
   private render(): void {
-    this.ctx.clearRect(0, 0, this.canvas.width / this.currentDPR, this.canvas.height / this.currentDPR);
+    const canvasWidth = this.canvas.width / this.currentDPR;
+    const canvasHeight = this.canvas.height / this.currentDPR;
 
-    this.drawBackground();
+    // Clear and paint the full-canvas background.
+    this.ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    this.ctx.fillStyle = CanvasCandlestickRenderer.COLOR_BACKGROUND;
+    this.ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
     if (this.bars.length === 0) {
       return;
     }
 
-    this.drawGrid();
-    this.drawCandles();
-    this.drawTimeAxis();
-    this.drawPriceAxis();
-    this.drawLastPriceLine();
-  }
-
-  private drawBackground(): void {
-    const canvasWidth = this.canvas.width / this.currentDPR;
-    const canvasHeight = this.canvas.height / this.currentDPR;
-    const margins = CanvasCandlestickRenderer.MARGINS;
-
-    this.ctx.fillStyle = CanvasCandlestickRenderer.COLOR_BACKGROUND;
-    this.ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-    this.ctx.fillStyle = CanvasCandlestickRenderer.COLOR_AXIS_BG;
-    this.ctx.fillRect(0, canvasHeight - margins.bottom, canvasWidth, margins.bottom);
-
-    this.ctx.fillRect(
-      canvasWidth - margins.right,
-      0,
-      margins.right,
-      canvasHeight - margins.bottom
-    );
-  }
-
-  private drawGrid(): void {
-    const priceRange = this.transform.getPriceRange();
-    if (!priceRange) return;
-
-    const ticks = generateNiceTicks(priceRange, 8);
-
-    this.ctx.strokeStyle = CanvasCandlestickRenderer.COLOR_GRID;
-    this.ctx.lineWidth = 1;
-
-    const chartWidth = this.transform.getChartWidth();
-    const margins = CanvasCandlestickRenderer.MARGINS;
-
-    for (const price of ticks) {
-      const y = this.transform.priceToY(price);
-
-      this.ctx.beginPath();
-      this.ctx.moveTo(margins.left, y);
-      this.ctx.lineTo(margins.left + chartWidth, y);
-      this.ctx.stroke();
-    }
-  }
-
-  private drawCandles(): void {
-    const visibleRange = this.transform.getVisibleBarRange();
-    if (!visibleRange) return;
-
-    const barWidth = this.transform.getBarWidth();
-    const bodyWidth = barWidth * 0.8;
-
-    for (let i = visibleRange.start; i <= visibleRange.end; i++) {
-      const bar = this.bars[i];
-      if (!bar) continue;
-
-      const x = this.transform.barIndexToX(i);
-      const openY = this.transform.priceToY(bar.open);
-      const closeY = this.transform.priceToY(bar.close);
-      const highY = this.transform.priceToY(bar.high);
-      const lowY = this.transform.priceToY(bar.low);
-
-      const isBullish = bar.close >= bar.open;
-      const color = isBullish
-        ? CanvasCandlestickRenderer.COLOR_UP
-        : CanvasCandlestickRenderer.COLOR_DOWN;
-
-      this.ctx.fillStyle = color;
-      this.ctx.strokeStyle = color;
-
-      // Draw wick
-      this.ctx.lineWidth = 1;
-      this.ctx.beginPath();
-      this.ctx.moveTo(x, highY);
-      this.ctx.lineTo(x, lowY);
-      this.ctx.stroke();
-
-      // Draw body
-      const bodyTop = Math.min(openY, closeY);
-      const bodyHeight = Math.abs(closeY - openY);
-
-      if (bodyHeight < 1) {
-        // Doji
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        this.ctx.moveTo(x - bodyWidth / 2, openY);
-        this.ctx.lineTo(x + bodyWidth / 2, openY);
-        this.ctx.stroke();
-      } else {
-        this.ctx.fillRect(x - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
-      }
-    }
-  }
-
-  private drawTimeAxis(): void {
-    const visibleRange = this.transform.getVisibleBarRange();
-    if (!visibleRange) return;
-
-    const canvasHeight = this.canvas.height / this.currentDPR;
-    const margins = CanvasCandlestickRenderer.MARGINS;
-
-    const visibleBarCount = visibleRange.end - visibleRange.start + 1;
-    const labelInterval = Math.max(1, Math.floor(visibleBarCount / 10));
-
-    this.ctx.fillStyle = CanvasCandlestickRenderer.COLOR_TEXT;
-    this.ctx.font = '12px sans-serif';
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
-
-    const labelY = canvasHeight - margins.bottom / 2;
-
-    for (let i = visibleRange.start; i <= visibleRange.end; i += labelInterval) {
-      const bar = this.bars[i];
-      if (!bar) continue;
-
-      const x = this.transform.barIndexToX(i);
-      const label = formatTime(bar.ts_event);
-
-      this.ctx.fillText(label, x, labelY);
-    }
-  }
-
-  private drawPriceAxis(): void {
-    const priceRange = this.transform.getPriceRange();
-    if (!priceRange) return;
-
-    const canvasWidth = this.canvas.width / this.currentDPR;
-    const margins = CanvasCandlestickRenderer.MARGINS;
-
-    const ticks = generateNiceTicks(priceRange, 8);
-
-    this.ctx.fillStyle = CanvasCandlestickRenderer.COLOR_TEXT;
-    this.ctx.font = '12px sans-serif';
-    this.ctx.textAlign = 'left';
-    this.ctx.textBaseline = 'middle';
-
-    const labelX = canvasWidth - margins.right + 5;
-
-    for (const price of ticks) {
-      const y = this.transform.priceToY(price);
-      const label = formatPrice(price);
-
-      this.ctx.fillText(label, labelX, y);
-    }
-  }
-
-  private drawLastPriceLine(): void {
-    if (this.bars.length === 0) return;
-
-    const lastBar = this.bars[this.bars.length - 1];
-    const y = this.transform.priceToY(lastBar.close);
-
-    const chartWidth = this.transform.getChartWidth();
-    const canvasWidth = this.canvas.width / this.currentDPR;
-    const margins = CanvasCandlestickRenderer.MARGINS;
-
-    // Draw dashed line
-    this.ctx.strokeStyle = CanvasCandlestickRenderer.COLOR_LAST_PRICE;
-    this.ctx.lineWidth = 1;
-    this.ctx.setLineDash([5, 5]);
-
-    this.ctx.beginPath();
-    this.ctx.moveTo(margins.left, y);
-    this.ctx.lineTo(margins.left + chartWidth, y);
-    this.ctx.stroke();
-
-    this.ctx.setLineDash([]);
-
-    // Draw label box
-    const label = formatPrice(lastBar.close);
-    this.ctx.font = '12px sans-serif';
-    const textMetrics = this.ctx.measureText(label);
-    const textWidth = textMetrics.width;
-
-    const boxX = canvasWidth - margins.right + 2;
-    const boxY = y - 8;
-    const boxWidth = textWidth + 6;
-    const boxHeight = 16;
-
-    this.ctx.fillStyle = CanvasCandlestickRenderer.COLOR_BACKGROUND;
-    this.ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
-
-    this.ctx.strokeStyle = CanvasCandlestickRenderer.COLOR_LAST_PRICE;
-    this.ctx.lineWidth = 1;
-    this.ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
-
-    this.ctx.fillStyle = CanvasCandlestickRenderer.COLOR_TEXT;
-    this.ctx.textAlign = 'left';
-    this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(label, boxX + 3, y);
+    // Delegate all pane drawing (candles + volume histogram) to the layout.
+    this.paneLayout.render(this.ctx, this.currentVisibleRange);
   }
 }
