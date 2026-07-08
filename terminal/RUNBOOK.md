@@ -5,10 +5,12 @@ green and captured in [`VERIFICATION.md`](./VERIFICATION.md). The **one remainin
 step a human must do** is eyeball the live chart in a browser — an agent can't
 watch pixels paint. This runbook is that ~3-minute smoke test.
 
-- **Current Slice:** Slice 4 (Multi-Pane Layout + Volume Pane)`
-- **What you're verifying:** 1-minute AUD/USD candles stream progressively over a
-  typed WebSocket envelope using a custom HTML5 Canvas renderer, with crisp rendering,
-  axes, last-price line, and no external charting dependencies.
+- **Current Slice:** Slice 5 (Order-Flow Analytics — CVD + delta candles)
+- **What you're verifying:** 1-minute **Binance ETHUSDT** candles (aggregated from trade
+  ticks, real traded volume) stream progressively over a typed WebSocket envelope using a
+  custom HTML5 Canvas renderer — a three-pane layout (price / CVD / volume) with
+  delta-colored candles, crisp rendering, axes, last-price line, and no external charting
+  dependencies.
 
 ---
 
@@ -72,23 +74,24 @@ Confirm each of the following (slice 2 canvas acceptance criteria):
 | A | Full-page canvas chart renders within ~2 seconds | ☐ |
 | B | Candlestick bars (green/red OHLC) appear **progressively** (≈50 ms per bar) | ☐ |
 | C | **Time axis** (bottom) shows HH:MM labels in UTC | ☐ |
-| D | **Price axis** (right) shows 5-decimal formatted prices (~0.67045) | ☐ |
+| D | **Price axis** (right) shows formatted prices (ETHUSDT ~2-decimal, e.g. ~423.76) | ☐ |
 | E | **Last-price line** visible as a dashed horizontal line with price label | ☐ |
 | F | **No TradingView logo** or references visible anywhere | ☐ |
 | G | **No** console errors mentioning `WebSocket`, canvas, or rendering | ☐ |
 | H | Chart resizes smoothly when browser window is resized | ☐ |
 
 **What "good" looks like:** the chart starts empty, then candles march in left-to-right,
-several per second, filling out the ~29.5 h of AUD/USD data (hundreds of 1-min bars)
+several per second, filling out the ~5 h of Binance ETHUSDT data (~300 1-min bars)
 over roughly half a minute. Bars are green (#26a69a) / red (#ef5350) OHLC candles rendered
-on a crisp HTML5 canvas with clear axes and a last-price indicator.
+on a crisp HTML5 canvas with clear axes and a last-price indicator. (Candle color is
+**delta-based** by default — see §3c — which can differ from close-vs-open.)
 ### Quick DevTools sanity (optional)
 ### Quick DevTools sanity (optional)
 In the **Network → WS** tab, click the `/ws` connection → **Messages**. Each frame
 should be JSON shaped like:
 ```json
 {"v":1,"type":"bar","seq":1,
- "payload":{"ts_event":1580395680000,"open":0.67,"high":0.6705,"low":0.6698,"close":0.6702,"volume":...}}
+ "payload":{"ts_event":1597399260000,"open":423.76,"high":424.10,"low":423.50,"close":423.90,"volume":...,"buy_volume":...,"sell_volume":...,"delta":...}}
 ```
 `seq` increments monotonically; `ts_event` is ms and increases. (These are the exact
 invariants `test_websocket.py` asserts, so if the tests pass and frames look like
@@ -231,7 +234,7 @@ Confirm:
 | Browser shows a blank page, `404` on `/` | `web/dist/` wasn't built — check the `npm run build` output in the `run.sh` log; rerun `cd terminal/client && npm run build`. |
 | Chart container error in console (`chart-container element not found`) | Stale `dist/` — rebuild the terminal (`npm run build`) so `index.html` matches `main.ts`. |
 | Console shows `WebSocket connection ... failed` | Server didn't start (see the `run.sh` terminal) or port 8000 is taken — free it or change the port in `run.sh` **and** it'll still be same-origin, so no client change needed. |
-| Chart renders but **no** bars ever appear | Backtest produced no bars — confirm the tick dataset is present at `tests/test_data/truefx/audusd-ticks.csv`; check the server log for a backtest error. |
+| Chart renders but **no** bars ever appear | Backtest produced no bars — confirm the trade-tick dataset is present at `tests/test_data/binance/ethusdt-trades.csv` (default) or `tests/test_data/binance/btcusdt-trades.parquet`; check the server log for a backtest error. |
 | Bars appear all at once with no delay | `delay_ms` in `create_backtest_queue` was set to 0; default is 50 ms. |
 | Port 8000 already in use | `lsof -ti:8000 | xargs kill`, or edit the `--port` in `terminal/run.sh`. |
 
