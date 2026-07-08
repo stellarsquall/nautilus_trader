@@ -161,6 +161,36 @@ buffer capacity (see §4). All slice-2/3 behavior must continue to work.
 
 ---
 
+## 3c. Slice 5 — Order-Flow Analytics (CVD + delta candles) Verification
+
+The feed is now **Binance ETHUSDT trade ticks** (default), aggregated into 1-minute
+LAST-INTERNAL bars, so `bar.volume` is **real traded volume** and each bar carries
+order-flow fields (`buy_volume` / `sell_volume` / `delta`). The chart is now **three
+panes** (price 60% / CVD 20% / volume 20%) on the shared time axis. All slice-2/3/4
+behavior must continue to work.
+
+| # | Action | Expected | Pass? |
+|---|--------|----------|-------|
+| V1 | Look at the whole chart | **Three** stacked panes: price (top), a **CVD line pane** (middle), volume histogram (bottom), all on one time axis | ☐ |
+| V2 | Inspect the middle pane | A **cumulative-volume-delta line** (blue) with its own right-side integer axis; it trends up when buying dominates, down when selling dominates | ☐ |
+| V3 | Inspect the candle bodies | Candles are **delta-colored by default** — green when the bar's `delta ≥ 0` (net buying), red when `delta < 0` (net selling). This can differ from close-vs-open coloring | ☐ |
+| V4 | Find the toggle (top-left) and click it | Button reads **"Color: Delta"**; clicking switches to **"Color: Price"** and candles revert to close-vs-open coloring; clicking again restores delta coloring | ☐ |
+| V5 | Move the mouse over the chart | Crosshair spans **all three panes**; the value label reads **price** in the top pane, **integer CVD** in the middle pane, **integer volume** in the bottom pane | ☐ |
+| V6 | **Pan / zoom** (any slice-3 gesture) | All three panes move/zoom **together in lockstep** on the shared time axis | ☐ |
+| V7 | Re-run the slice-4 checks (U1–U7) and slice-3 checks (I–T) | All prior interactions and the multi-pane behavior still pass unchanged | ☐ |
+
+> Mechanism: the server actor (`bar_streaming_actor.py`) buckets each `TradeTick` by
+> aggressor side into the current interval, and on bar close emits an **enriched `bar`**
+> envelope (OHLCV + buy/sell/delta) followed by a **`cvd`** envelope (session-cumulative
+> delta), sharing the monotonic seq. Subscriptions happen in the actor's `on_start` so the
+> INTERNAL aggregator doesn't backfill empty intervals (an OOM guard). Client-side,
+> `CanvasCandlestickRenderer` composes a 3-pane `PaneLayout` `[0.6, 0.2, 0.2]`, ingests cvd
+> envelopes keyed by `ts_event` (resynced onto bar indices after buffer trims), colors
+> candles by delta sign, and adds the delta/price color toggle. Protocol stays **v:1**
+> (the new bar fields are additive; `cvd` was already reserved in the `Envelope` union).
+
+---
+
 ## 4. Late-joiner check — replay buffer
 
 This proves a browser that connects *after* streaming started still sees recent history.
@@ -210,8 +240,16 @@ Confirm:
 ## 7. Sign-off
 
 When the slice-2 canvas checks (A–H) **and** the slice-3 interaction checks (I–T) **and**
-the slice-4 multi-pane checks (U1–U7) **and** the late-joiner test (E) are confirmed, the
-terminal is verified end-to-end.
+the slice-4 multi-pane checks (U1–U7) **and** the slice-5 order-flow checks (V1–V7) **and**
+the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
+
+**Slice 5 (order-flow analytics — CVD + delta candles) sign-off:**
+- Verified by: _pending_   Date: ____-__-__   Browser / OS: ____
+- Order-flow checks: V1 ☐ V2 ☐ V3 ☐ V4 ☐ V5 ☐ V6 ☐ V7 ☐
+
+**Notes:** _pending live browser sign-off._ Static/automated verification (assistant, 2026-07-07):
+server `pytest` 80 passed; client `tsc --noEmit` 0 errors, `vitest` 354 passed, `vite build`
+green; core isolation `git diff terminal..HEAD -- crates/ nautilus_trader/` = 0 lines.
 
 **Slice 4 (multi-pane layout + volume pane) sign-off:**
 - Verified by: user + assistant (paired)   Date: 2026-07-07   Browser / OS: Chrome / macOS
