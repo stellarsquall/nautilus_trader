@@ -84,21 +84,22 @@ class TestDatasetLoading:
             loop.close()
 
     def test_bar_type_is_last_internal(self):
-        """Test that BarType string contains '-LAST-INTERNAL'."""
-        # The BarType is created in create_backtest_queue(), we can verify it directly
+        """Test that the per-dataset BarType strings use LAST-INTERNAL aggregation.
+
+        ETHUSDT aggregates 1-MINUTE bars (data spans hours); BTCUSDT aggregates
+        1-SECOND bars (data spans <1 minute, so 1-MINUTE would yield no bars).
+        """
         from nautilus_trader.model.data import BarType
 
-        # Test ETHUSDT BarType
+        # ETHUSDT: 1-MINUTE bars
         bar_type_ethusdt = BarType.from_str("ETHUSDT.BINANCE-1-MINUTE-LAST-INTERNAL")
-        assert "-LAST-INTERNAL" in str(bar_type_ethusdt), (
-            f"ETHUSDT BarType should contain '-LAST-INTERNAL', got: {bar_type_ethusdt}"
-        )
+        assert "-LAST-INTERNAL" in str(bar_type_ethusdt)
+        assert "1-MINUTE" in str(bar_type_ethusdt)
 
-        # Test BTCUSDT BarType
-        bar_type_btcusdt = BarType.from_str("BTCUSDT.BINANCE-1-MINUTE-LAST-INTERNAL")
-        assert "-LAST-INTERNAL" in str(bar_type_btcusdt), (
-            f"BTCUSDT BarType should contain '-LAST-INTERNAL', got: {bar_type_btcusdt}"
-        )
+        # BTCUSDT: 1-SECOND bars (matches create_backtest_queue's per-dataset spec)
+        bar_type_btcusdt = BarType.from_str("BTCUSDT.BINANCE-1-SECOND-LAST-INTERNAL")
+        assert "-LAST-INTERNAL" in str(bar_type_btcusdt)
+        assert "1-SECOND" in str(bar_type_btcusdt)
 
     def test_invalid_dataset_raises_error(self):
         """Test that invalid dataset parameter raises ValueError."""

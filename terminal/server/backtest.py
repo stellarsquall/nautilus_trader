@@ -15,12 +15,9 @@
 
 import asyncio
 
-import pandas as pd
-
 from nautilus_trader.backtest.config import BacktestEngineConfig
 from nautilus_trader.backtest.engine import BacktestEngine
 from nautilus_trader.model.currencies import USDT
-from nautilus_trader.model.data import BarType
 from nautilus_trader.model.enums import AccountType
 from nautilus_trader.model.enums import AggressorSide
 from nautilus_trader.model.enums import OmsType
@@ -30,7 +27,6 @@ from nautilus_trader.model.objects import Money
 from nautilus_trader.persistence.wranglers import TradeTickDataWrangler
 from nautilus_trader.test_kit.providers import TestDataProvider
 from nautilus_trader.test_kit.providers import TestInstrumentProvider
-
 from terminal.server.bar_streaming_actor import BarStreamingActor
 from terminal.server.bar_streaming_actor import BarStreamingActorConfig
 
@@ -71,7 +67,9 @@ def create_backtest_queue(
     - Dataset ETHUSDT: tests/test_data/binance/ethusdt-trades.csv (69,806 trades)
     - Dataset BTCUSDT: tests/test_data/binance/btcusdt-trades.parquet (2,001 trades)
     - BTCUSDT parquet buyer_maker column is coerced from strings to bool
-    - BarType: <SYMBOL>.BINANCE-1-MINUTE-LAST-INTERNAL (LAST price, INTERNAL aggregation)
+    - BarType: ETHUSDT → 1-MINUTE-LAST-INTERNAL, BTCUSDT → 1-SECOND-LAST-INTERNAL
+      (LAST price, INTERNAL aggregation; interval chosen so each dataset's span
+      yields complete bars). The actor's bar_interval_ms matches the BarType.
     - Actor subscribes to trade ticks AND bars, forwarding to queue via call_soon_threadsafe
     - The engine is NOT started; caller must run engine.run() on a background thread
 
@@ -97,15 +95,21 @@ def create_backtest_queue(
         starting_balances=[Money(1_000_000, USDT)],
     )
 
-    # Add instrument based on dataset
+    # Add instrument based on dataset. Each dataset uses a bar interval that
+    # actually produces complete bars for its data span: ETHUSDT spans hours
+    # (1-MINUTE), BTCUSDT spans <1 minute (1-SECOND).
     if dataset == "ethusdt":
         instrument = TestInstrumentProvider.ethusdt_binance()
         data_path = "binance/ethusdt-trades.csv"
         read_func = "read_csv_ticks"
+        bar_spec = "1-MINUTE-LAST-INTERNAL"
+        bar_interval_ms = 60_000
     else:  # btcusdt
         instrument = TestInstrumentProvider.btcusdt_binance()
         data_path = "binance/btcusdt-trades.parquet"
         read_func = "read_parquet_ticks"
+        bar_spec = "1-SECOND-LAST-INTERNAL"
+        bar_interval_ms = 1_000
 
     engine.add_instrument(instrument)
 
@@ -117,13 +121,14 @@ def create_backtest_queue(
         # Read parquet directly to coerce buyer_maker
         raw_data = getattr(provider, read_func)(data_path)
 
-        # Coerce buyer_maker column from strings 'True'/'False' to Python bool
-        if hasattr(raw_data, "buyer_maker"):
-            # If raw_data is a DataFrame
-            if isinstance(raw_data["buyer_maker"].iloc[0], str):
-                raw_data["buyer_maker"] = raw_data["buyer_maker"].map(
-                    {"True": True, "False": False}
-                )
+        # Coerce buyer_maker column from strings 'True'/'False' to Python bool.
+        # (Guard for DataFrame with a string-typed buyer_maker column.)
+        if hasattr(raw_data, "buyer_maker") and isinstance(
+            raw_data["buyer_maker"].iloc[0], str
+        ):
+            raw_data["buyer_maker"] = raw_data["buyer_maker"].map(
+                {"True": True, "False": False}
+            )
 
         wrangler = TradeTickDataWrangler(instrument=instrument)
         ticks = wrangler.process(raw_data)
@@ -147,22 +152,23 @@ def create_backtest_queue(
 
     engine.add_data(ticks)
 
-    # Create actor and queue
+    # Create actor and queue. Subscriptions happen in the actor's on_start
+    # (NOT here): subscribing an INTERNAL bar aggregator before engine.run()
+    # can make it backfill empty intervals and exhaust memory (severe at
+    # 1-SECOND). We pass the instrument and bar type via config instead.
     queue = asyncio.Queue()
-    actor_config = BarStreamingActorConfig(delay_ms=delay_ms)
+    symbol = instrument.id.symbol.value
+    actor_config = BarStreamingActorConfig(
+        delay_ms=delay_ms,
+        bar_interval_ms=bar_interval_ms,
+        instrument_id=str(instrument.id),
+        bar_type=f"{symbol}.BINANCE-{bar_spec}",
+    )
     actor = BarStreamingActor(config=actor_config)
     actor.set_queue(queue, loop)
 
-    # Register actor with engine
+    # Register actor with engine (actor.on_start performs the subscriptions)
     engine.add_actor(actor)
-
-    # Subscribe actor to trade ticks
-    actor.subscribe_trade_ticks(instrument.id)
-
-    # Subscribe actor to 1-minute bars with LAST-INTERNAL aggregation
-    symbol = instrument.id.symbol.value
-    bar_type = BarType.from_str(f"{symbol}.BINANCE-1-MINUTE-LAST-INTERNAL")
-    actor.subscribe_bars(bar_type)
 
     return engine, queue
 

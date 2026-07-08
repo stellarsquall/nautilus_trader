@@ -11,24 +11,55 @@ import pytest
 # Add parent directory to path to allow imports
 sys.path.insert(0, "/Users/robinbeck/Projects/nautilus/nautilus_trader_stellarsquall/.worktrees/issue-7732fe1e-15-backend-fastapi-app")
 
-# Mock NautilusTrader modules before importing our code
-sys.modules["nautilus_trader"] = MagicMock()
-sys.modules["nautilus_trader.backtest"] = MagicMock()
-sys.modules["nautilus_trader.backtest.config"] = MagicMock()
-sys.modules["nautilus_trader.backtest.engine"] = MagicMock()
-sys.modules["nautilus_trader.common"] = MagicMock()
-sys.modules["nautilus_trader.common.actor"] = MagicMock()
-sys.modules["nautilus_trader.config"] = MagicMock()
-sys.modules["nautilus_trader.model"] = MagicMock()
-sys.modules["nautilus_trader.model.currencies"] = MagicMock()
-sys.modules["nautilus_trader.model.data"] = MagicMock()
-sys.modules["nautilus_trader.model.enums"] = MagicMock()
-sys.modules["nautilus_trader.model.identifiers"] = MagicMock()
-sys.modules["nautilus_trader.model.objects"] = MagicMock()
-sys.modules["nautilus_trader.persistence"] = MagicMock()
-sys.modules["nautilus_trader.persistence.wranglers"] = MagicMock()
-sys.modules["nautilus_trader.test_kit"] = MagicMock()
-sys.modules["nautilus_trader.test_kit.providers"] = MagicMock()
+# Mock NautilusTrader modules before importing our code.
+#
+# These shadows let main.py import without pulling heavy Cython at unit-test
+# time. CRITICAL: they MUST be restored at the end of this module's import,
+# because pytest imports every test module during the COLLECTION phase before
+# running any test. If left installed, these mocks leak into the run phase and
+# break sibling tests that need the REAL nautilus_trader (test_backtest,
+# test_integration_dataset_actor_streaming), e.g. "Aggregation type not
+# supported for time bars, was MINUTE". We save originals, install mocks, and
+# restore immediately after the (lazy/patched) imports are set up.
+_SHADOWED_MODULE_NAMES = (
+    "nautilus_trader",
+    "nautilus_trader.backtest",
+    "nautilus_trader.backtest.config",
+    "nautilus_trader.backtest.engine",
+    "nautilus_trader.common",
+    "nautilus_trader.common.actor",
+    "nautilus_trader.config",
+    "nautilus_trader.model",
+    "nautilus_trader.model.currencies",
+    "nautilus_trader.model.data",
+    "nautilus_trader.model.enums",
+    "nautilus_trader.model.identifiers",
+    "nautilus_trader.model.objects",
+    "nautilus_trader.persistence",
+    "nautilus_trader.persistence.wranglers",
+    "nautilus_trader.test_kit",
+    "nautilus_trader.test_kit.providers",
+)
+_SAVED_MODULES = {name: sys.modules.get(name) for name in _SHADOWED_MODULE_NAMES}
+for _name in _SHADOWED_MODULE_NAMES:
+    sys.modules[_name] = MagicMock()
+
+
+def _restore_shadowed_modules() -> None:
+    """Restore real (or absent) nautilus_trader modules into sys.modules."""
+    for name, original in _SAVED_MODULES.items():
+        if original is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
+
+
+_restore_shadowed_modules()
+
+
+def teardown_module(module):  # noqa: ARG001
+    """Belt-and-suspenders restore (import-time restore already ran)."""
+    _restore_shadowed_modules()
 
 
 class TestLifespanStartup:
