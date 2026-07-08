@@ -15,16 +15,19 @@
 
 import asyncio
 
+import pandas as pd
+
 from nautilus_trader.backtest.config import BacktestEngineConfig
 from nautilus_trader.backtest.engine import BacktestEngine
-from nautilus_trader.model.currencies import USD
+from nautilus_trader.model.currencies import USDT
 from nautilus_trader.model.data import BarType
 from nautilus_trader.model.enums import AccountType
+from nautilus_trader.model.enums import AggressorSide
 from nautilus_trader.model.enums import OmsType
 from nautilus_trader.model.identifiers import TraderId
 from nautilus_trader.model.identifiers import Venue
 from nautilus_trader.model.objects import Money
-from nautilus_trader.persistence.wranglers import QuoteTickDataWrangler
+from nautilus_trader.persistence.wranglers import TradeTickDataWrangler
 from nautilus_trader.test_kit.providers import TestDataProvider
 from nautilus_trader.test_kit.providers import TestInstrumentProvider
 
@@ -35,13 +38,14 @@ from terminal.server.bar_streaming_actor import BarStreamingActorConfig
 def create_backtest_queue(
     loop: asyncio.AbstractEventLoop,
     delay_ms: int = 50,
+    dataset: str = "ethusdt",
 ) -> tuple[BacktestEngine, asyncio.Queue]:
     """
-    Create a BacktestEngine configured to stream 1-minute AUD/USD bars to a queue.
+    Create a BacktestEngine configured to stream 1-minute Binance trade tick bars to a queue.
 
-    Mirrors the setup from examples/backtest/fx_ema_cross_audusd_bars_from_ticks.py
-    with INTERNAL bar aggregation from quote ticks. The engine is configured with
-    a SIM venue, AUD/USD instrument, and historical quote tick data.
+    Loads Binance trade tick data (ETHUSDT or BTCUSDT) using TradeTickDataWrangler,
+    validates both AggressorSide.BUYER and SELLER are present, and creates LAST-INTERNAL
+    bars from trade volume aggregation.
 
     Parameters
     ----------
@@ -49,44 +53,98 @@ def create_backtest_queue(
         The main event loop for thread-safe queue bridging.
     delay_ms : int, default 50
         Playback delay in milliseconds after each bar emission.
+    dataset : str, default "ethusdt"
+        Dataset to load: "ethusdt" (69,806 trades CSV) or "btcusdt" (2,001 trades parquet).
 
     Returns
     -------
     tuple[BacktestEngine, asyncio.Queue]
         The configured engine (ready to run) and the queue receiving bar envelopes.
 
+    Raises
+    ------
+    ValueError
+        If dataset is invalid or if both aggressor sides are not present in data.
+
     Notes
     -----
-    - Dataset: tests/test_data/truefx/audusd-ticks.csv (~100k quote ticks, 2020-01-30/31)
-    - BarType: AUD/USD.SIM-1-MINUTE-MID-INTERNAL (INTERNAL aggregation is critical)
-    - Actor subscribes to bars and forwards to queue via call_soon_threadsafe
+    - Dataset ETHUSDT: tests/test_data/binance/ethusdt-trades.csv (69,806 trades)
+    - Dataset BTCUSDT: tests/test_data/binance/btcusdt-trades.parquet (2,001 trades)
+    - BTCUSDT parquet buyer_maker column is coerced from strings to bool
+    - BarType: <SYMBOL>.BINANCE-1-MINUTE-LAST-INTERNAL (LAST price, INTERNAL aggregation)
+    - Actor subscribes to trade ticks AND bars, forwarding to queue via call_soon_threadsafe
     - The engine is NOT started; caller must run engine.run() on a background thread
 
     """
+    # Validate dataset parameter
+    if dataset not in ("ethusdt", "btcusdt"):
+        msg = f"Invalid dataset '{dataset}', must be 'ethusdt' or 'btcusdt'"
+        raise ValueError(msg)
+
     # Configure backtest engine
     config = BacktestEngineConfig(
         trader_id=TraderId("BACKTESTER-001"),
     )
     engine = BacktestEngine(config=config)
 
-    # Add trading venue (SIM venue for FX instruments)
-    SIM = Venue("SIM")
+    # Add trading venue (BINANCE venue for crypto)
+    BINANCE = Venue("BINANCE")
     engine.add_venue(
-        venue=SIM,
-        oms_type=OmsType.HEDGING,  # Venue generates position IDs
-        account_type=AccountType.MARGIN,
-        base_currency=USD,
-        starting_balances=[Money(1_000_000, USD)],
+        venue=BINANCE,
+        oms_type=OmsType.NETTING,
+        account_type=AccountType.CASH,
+        base_currency=None,  # Multi-currency account
+        starting_balances=[Money(1_000_000, USDT)],
     )
 
-    # Add instrument
-    AUDUSD_SIM = TestInstrumentProvider.default_fx_ccy("AUD/USD", SIM)
-    engine.add_instrument(AUDUSD_SIM)
+    # Add instrument based on dataset
+    if dataset == "ethusdt":
+        instrument = TestInstrumentProvider.ethusdt_binance()
+        data_path = "binance/ethusdt-trades.csv"
+        read_func = "read_csv_ticks"
+    else:  # btcusdt
+        instrument = TestInstrumentProvider.btcusdt_binance()
+        data_path = "binance/btcusdt-trades.parquet"
+        read_func = "read_parquet_ticks"
 
-    # Add quote tick data
+    engine.add_instrument(instrument)
+
+    # Add trade tick data
     provider = TestDataProvider()
-    wrangler = QuoteTickDataWrangler(instrument=AUDUSD_SIM)
-    ticks = wrangler.process(provider.read_csv_ticks("truefx/audusd-ticks.csv"))
+
+    # For BTCUSDT parquet, coerce buyer_maker from strings to bool
+    if dataset == "btcusdt":
+        # Read parquet directly to coerce buyer_maker
+        raw_data = getattr(provider, read_func)(data_path)
+
+        # Coerce buyer_maker column from strings 'True'/'False' to Python bool
+        if hasattr(raw_data, "buyer_maker"):
+            # If raw_data is a DataFrame
+            if isinstance(raw_data["buyer_maker"].iloc[0], str):
+                raw_data["buyer_maker"] = raw_data["buyer_maker"].map(
+                    {"True": True, "False": False}
+                )
+
+        wrangler = TradeTickDataWrangler(instrument=instrument)
+        ticks = wrangler.process(raw_data)
+    else:
+        # ETHUSDT CSV - direct processing
+        wrangler = TradeTickDataWrangler(instrument=instrument)
+        raw_data = getattr(provider, read_func)(data_path)
+        ticks = wrangler.process(raw_data)
+
+    # Validate both aggressor sides are present
+    aggressor_sides = {tick.aggressor_side for tick in ticks}
+    if not {AggressorSide.BUYER, AggressorSide.SELLER}.issubset(aggressor_sides):
+        buyer_count = sum(1 for tick in ticks if tick.aggressor_side == AggressorSide.BUYER)
+        seller_count = sum(1 for tick in ticks if tick.aggressor_side == AggressorSide.SELLER)
+        msg = (
+            f"Dataset '{dataset}' missing aggressor sides. "
+            f"BUYER count: {buyer_count}, SELLER count: {seller_count}. "
+            f"Both sides required."
+        )
+        raise ValueError(msg)
+
     engine.add_data(ticks)
 
     # Create actor and queue
@@ -98,8 +156,12 @@ def create_backtest_queue(
     # Register actor with engine
     engine.add_actor(actor)
 
-    # Subscribe actor to 1-minute bars with INTERNAL aggregation
-    bar_type = BarType.from_str("AUD/USD.SIM-1-MINUTE-MID-INTERNAL")
+    # Subscribe actor to trade ticks
+    actor.subscribe_trade_ticks(instrument.id)
+
+    # Subscribe actor to 1-minute bars with LAST-INTERNAL aggregation
+    symbol = instrument.id.symbol.value
+    bar_type = BarType.from_str(f"{symbol}.BINANCE-1-MINUTE-LAST-INTERNAL")
     actor.subscribe_bars(bar_type)
 
     return engine, queue
