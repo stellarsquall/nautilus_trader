@@ -244,12 +244,17 @@ the slice-4 multi-pane checks (U1–U7) **and** the slice-5 order-flow checks (V
 the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
 
 **Slice 5 (order-flow analytics — CVD + delta candles) sign-off:**
-- Verified by: _pending_   Date: ____-__-__   Browser / OS: ____
-- Order-flow checks: V1 ☐ V2 ☐ V3 ☐ V4 ☐ V5 ☐ V6 ☐ V7 ☐
+- Verified by: user + assistant (paired)   Date: 2026-07-07   Browser / OS: Chrome / macOS
+- Order-flow checks: V1 ☑ V2 ☑ V3 ☑ V4 ☑ V5 ☑ V6 ☑ V7 ☑
 
-**Notes:** _pending live browser sign-off._ Static/automated verification (assistant, 2026-07-07):
-server `pytest` 80 passed; client `tsc --noEmit` 0 errors, `vitest` 354 passed, `vite build`
-green; core isolation `git diff terminal..HEAD -- crates/ nautilus_trader/` = 0 lines.
+**Notes:** Verified from a live run on the Binance ETHUSDT feed. Three panes (price 60% /
+CVD line 20% / volume 20%) on the shared time axis; cumulative-delta line with integer
+axis; candles delta-colored by default with a working "Color: Delta" ↔ "Color: Price"
+toggle; crosshair readout per pane (price / integer CVD / integer volume); pan/zoom locks
+all three panes; slice-3 (I–T) and slice-4 (U1–U7) behavior intact. Automated gates:
+server `pytest` 80 passed; client `tsc --noEmit` 0 errors, `vitest` 354 passed, `vite
+build` green; core isolation `git diff terminal..HEAD -- crates/ nautilus_trader/` = 0
+lines. Core (`crates/`, `nautilus_trader/`) untouched.
 
 **Slice 4 (multi-pane layout + volume pane) sign-off:**
 - Verified by: user + assistant (paired)   Date: 2026-07-07   Browser / OS: Chrome / macOS

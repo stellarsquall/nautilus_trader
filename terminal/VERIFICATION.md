@@ -1,8 +1,50 @@
 # Terminal Implementation Verification
 
+**Current Slice:** Slice 5 (Order-Flow Analytics — CVD + delta candles)
+**Verification Date:** 2026-07-07
+**Status:** Verified — folded into `terminal`
+
+> This top section is the authoritative current-state record. Earlier per-slice notes
+> below are retained for history and were not rewritten.
+
+## Slice 5 Verification (independently reproduced)
+
+All commands run from the repo root on `feature/slice5-orderflow-manual` (7 commits
+ahead of `terminal`) before fast-forwarding `terminal` onto it.
+
+| Gate | Command | Result |
+|---|---|---|
+| Server tests | `uv run --no-sync python -m pytest terminal/server/tests/ -q` | **80 passed** |
+| Client type-check | `cd terminal/client && npm run type-check` | **0 errors** |
+| Client unit tests | `cd terminal/client && npx vitest run` | **354 passed** (13 files) |
+| Client build | `cd terminal/client && npm run build` | green — `dist/assets/index-*.js` **30.83 kB** (gzip 8.13 kB) |
+| Core isolation | `git diff terminal..HEAD -- crates/ nautilus_trader/ \| wc -l` | **0** |
+| No charting lib | `cd terminal/client && grep -ri "lightweight-charts\|tradingview" src/ package.json` | no matches (exit 1) |
+| Terminal delta | `git diff terminal..HEAD -- terminal/ \| wc -l` | 3535 lines |
+
+**Browser sign-off (V1–V7):** all pass — see RUNBOOK §3c / §7 (user + assistant, paired,
+2026-07-07, Chrome/macOS). Feed switched to Binance ETHUSDT trade ticks; three panes
+(price/CVD/volume); delta-colored candles + toggle; per-pane crosshair readout.
+
+**Scope note:** slice 5 modifies both tiers. Server: `backtest.py` (selectable Binance
+trade dataset, LAST-INTERNAL bars), `bar_streaming_actor.py` (aggressor-side bucketing,
+per-bar delta, session-cumulative CVD, dual `bar`+`cvd` envelopes, `on_start`
+subscriptions). Client: enriched `BarPayload` + `CvdPayload` (protocol stays v:1), 3-pane
+`PaneLayout`, `CVDPane`, delta candle coloring + toggle, `main.ts` cvd dispatch. Core
+(`crates/`, `nautilus_trader/`) untouched (0-line diff above).
+
+**Build-tooling note:** the AgentField slice-5 build only produced 2 of 9 issues as real
+code (dataset-loading, CVDPane); the other 7 were phantom completions (coder/reviewer/
+verifier agents crashed, marked "completed" without output). The remaining pipeline was
+completed manually on `feature/slice5-orderflow-manual` and verified as above.
+
+---
+
+# Terminal Implementation Verification
+
 **Current Slice:** Slice 2 (Canvas Renderer)
 **Verification Date:** 2026-07-06
-**Status:** Ready for verification
+**Status:** Ready for verification (historical)
 
 This document provides automated test results verifying that the NautilusTrader terminal implementation is complete, correct, and does not modify core system files.
 
