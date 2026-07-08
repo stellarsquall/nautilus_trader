@@ -17,14 +17,14 @@ export interface Envelope {
   /** Protocol version (literal 1, not number) */
   v: 1;
 
-  /** Message type - slice 1 implements only 'bar', others reserved */
+  /** Message type - slice 1 implements 'bar', slice 5 adds 'cvd'; others reserved */
   type: 'bar' | 'trade' | 'book_delta' | 'footprint' | 'cvd' | 'depth_heatmap';
 
   /** Monotonically increasing sequence number (global across all types) */
   seq: number;
 
-  /** Type-specific payload (BarPayload for type='bar', unknown for future types) */
-  payload: BarPayload | unknown;
+  /** Type-specific payload (BarPayload for 'bar', CvdPayload for 'cvd', unknown for future types) */
+  payload: BarPayload | CvdPayload | unknown;
 }
 
 /**
@@ -49,6 +49,36 @@ export interface BarPayload {
   /** Bar close price */
   close: number;
 
-  /** Bar volume */
+  /** Bar volume (real traded volume, aggregated from trade ticks) */
   volume: number;
+
+  /**
+   * Aggressive buy volume in this bar (trades with BUYER aggressor).
+   * Optional: present on slice-5+ order-flow bars; absent on legacy bars.
+   */
+  buy_volume?: number;
+
+  /** Aggressive sell volume in this bar (trades with SELLER aggressor). Optional. */
+  sell_volume?: number;
+
+  /** Per-bar volume delta (buy_volume - sell_volume). Optional. */
+  delta?: number;
+}
+
+/**
+ * Cumulative Volume Delta (CVD) payload for type='cvd' messages.
+ *
+ * Emitted once per closed bar, immediately after the bar envelope. Carries the
+ * session-cumulative volume delta (running sum of per-bar deltas) plus this
+ * bar's delta. Aligns to the bar with the matching ts_event.
+ */
+export interface CvdPayload {
+  /** Event timestamp in milliseconds (matches the corresponding bar's ts_event) */
+  ts_event: number;
+
+  /** Session-cumulative volume delta (running sum of per-bar deltas) */
+  cvd: number;
+
+  /** This bar's volume delta (buy_volume - sell_volume) */
+  delta: number;
 }

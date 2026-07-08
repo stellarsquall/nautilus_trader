@@ -1,5 +1,5 @@
 import type { Renderer } from './Renderer';
-import type { BarPayload } from '../types';
+import type { BarPayload, CvdPayload } from '../types';
 import { formatPrice, type BarRange } from '../chart/CoordinateTransform';
 import { ChartViewState } from '../chart/ChartViewState';
 import { InteractionController } from '../chart/InteractionController';
@@ -8,12 +8,14 @@ import { ResetToLatestButton } from '../chart/ResetToLatestButton';
 import { PaneLayout } from '../chart/PaneLayout';
 import { CandlestickPane } from '../chart/CandlestickPane';
 import { VolumePane } from '../chart/VolumePane';
+import { CVDPane } from '../chart/CVDPane';
 
 /**
  * CanvasCandlestickRenderer: the app-facing Renderer.
  *
- * Composes a multi-pane layout — a candlestick (price) pane over a delta-colored
- * volume pane — sharing one horizontal (time) coordinate transform and a single
+ * Composes a three-pane layout — a delta-colored candlestick (price) pane over
+ * a cumulative-volume-delta (CVD) line pane over a volume histogram — all
+ * sharing one horizontal (time) coordinate transform and a single
  * ChartViewState. The renderer owns the canvas, the DPR/resize plumbing, the
  * RAF-batched draw, and the interaction stack (pan/zoom, crosshair, Latest reset);
  * PaneLayout owns the per-pane drawing and the shared horizontal transform.
@@ -29,9 +31,18 @@ export class CanvasCandlestickRenderer implements Renderer {
   private readonly MAX_BARS = 1000;
   private readonly VISIBLE_BARS = 100;
 
-  // Multi-pane layout (candlestick + volume) sharing one horizontal transform
+  // Multi-pane layout (candlestick + CVD + volume) sharing one horizontal transform
   private paneLayout: PaneLayout;
   private currentVisibleRange: BarRange = { start: 0, end: 0 };
+
+  // Pane references retained for post-construction control (delta toggle, CVD feed)
+  private candlestickPane: CandlestickPane;
+  private cvdPane: CVDPane;
+
+  // CVD values keyed by bar ts_event (the cvd envelope's alignment key). Kept
+  // separate from bar indices so the CVDPane's per-index map can be rebuilt
+  // after the rolling buffer trims/shifts bars.
+  private cvdByTs: Map<number, { cvd: number; delta: number }> = new Map();
 
   // ResizeObserver and devicePixelRatio tracking
   private resizeObserver: ResizeObserver;
@@ -46,9 +57,10 @@ export class CanvasCandlestickRenderer implements Renderer {
   private interactionController: InteractionController;
   private crosshairOverlay: CrosshairOverlay;
   private resetButton: ResetToLatestButton;
+  private deltaToggleButton: HTMLButtonElement | null = null;
 
-  // Vertical split: candlestick pane 75%, volume pane 25%
-  private static readonly PANE_HEIGHT_FRACTIONS = [0.75, 0.25];
+  // Vertical split: price 60%, CVD 20%, volume 20% (volume bottom = time axis)
+  private static readonly PANE_HEIGHT_FRACTIONS = [0.6, 0.2, 0.2];
 
   // Visual constants
   private static readonly COLOR_BACKGROUND = '#ffffff';
@@ -88,11 +100,15 @@ export class CanvasCandlestickRenderer implements Renderer {
     // Track current DPR
     this.currentDPR = window.devicePixelRatio || 1;
 
-    // Compose the multi-pane layout: candlestick (price) over volume.
+    // Compose the three-pane layout: candlestick (price) over CVD over volume.
+    // Volume is the bottom pane (it draws the shared time axis).
     const candlestickPane = new CandlestickPane(containerWidth, containerHeight);
+    const cvdPane = new CVDPane(containerWidth, containerHeight);
     const volumePane = new VolumePane(containerWidth, containerHeight);
+    this.candlestickPane = candlestickPane;
+    this.cvdPane = cvdPane;
     this.paneLayout = new PaneLayout(
-      [candlestickPane, volumePane],
+      [candlestickPane, cvdPane, volumePane],
       CanvasCandlestickRenderer.PANE_HEIGHT_FRACTIONS,
       containerWidth,
       containerHeight
@@ -119,11 +135,12 @@ export class CanvasCandlestickRenderer implements Renderer {
 
     // Create crosshair overlay
     this.crosshairOverlay = new CrosshairOverlay(this.container, horizontalTransform);
-    // Per-pane value readout: price in the candle pane, integer volume in the
-    // volume pane (null suppresses the label when the cursor is off the panes).
+    // Per-pane value readout: price in the candle pane, integer CVD / volume in
+    // the lower panes (null suppresses the label when the cursor is off panes).
     this.crosshairOverlay.setValueResolver((y: number): string | null => {
       const resolved = this.paneLayout.yToValue(y);
       if (!resolved) return null;
+      // Pane 0 = price (formatted), panes 1 (CVD) and 2 (volume) = integers.
       return resolved.paneIndex === 0
         ? formatPrice(resolved.value)
         : Math.round(resolved.value).toString();
@@ -159,8 +176,52 @@ export class CanvasCandlestickRenderer implements Renderer {
       },
     });
 
+    // Create the delta-coloring toggle (delta coloring is ON by default).
+    this.createDeltaToggleButton();
+
     // Initial render (blank)
     this.scheduleRedraw();
+  }
+
+  /**
+   * Create a small toggle button that switches candle coloring between
+   * order-flow delta (default) and traditional close-vs-open. Positioned in the
+   * top-left of the container so it does not overlap the right-side price axis.
+   */
+  private createDeltaToggleButton(): void {
+    const button = document.createElement('button');
+    button.style.position = 'absolute';
+    button.style.top = '8px';
+    button.style.left = '8px';
+    button.style.zIndex = '10';
+    button.style.padding = '4px 8px';
+    button.style.font = '12px sans-serif';
+    button.style.cursor = 'pointer';
+    button.style.border = '1px solid #cccccc';
+    button.style.borderRadius = '4px';
+    button.style.background = '#ffffff';
+    button.style.color = '#333333';
+
+    const syncLabel = (): void => {
+      button.textContent = this.candlestickPane.isColorByDelta()
+        ? 'Color: Delta'
+        : 'Color: Price';
+    };
+    syncLabel();
+
+    button.addEventListener('click', () => {
+      const next = !this.candlestickPane.isColorByDelta();
+      this.candlestickPane.setColorByDelta(next);
+      syncLabel();
+      this.scheduleRedraw();
+    });
+
+    // Ensure the container can anchor the absolutely-positioned button.
+    if (getComputedStyle(this.container).position === 'static') {
+      this.container.style.position = 'relative';
+    }
+    this.container.appendChild(button);
+    this.deltaToggleButton = button;
   }
 
   public update(data: unknown): void {
@@ -211,6 +272,9 @@ export class CanvasCandlestickRenderer implements Renderer {
     this.paneLayout.setBars(this.bars);
     this.crosshairOverlay.setBars(this.bars);
 
+    // Re-align CVD values to the (possibly shifted) bar indices.
+    this.resyncCvd();
+
     // Recompute the visible window (view-state may have advanced)
     this.updateVisibleRange();
 
@@ -219,6 +283,57 @@ export class CanvasCandlestickRenderer implements Renderer {
 
     // Schedule redraw
     this.scheduleRedraw();
+  }
+
+  /**
+   * Ingest a cumulative-volume-delta (CVD) payload.
+   *
+   * CVD is stored keyed by ts_event (the envelope's alignment key) and then
+   * re-projected onto the current bar indices for the CVDPane. Storing by
+   * ts_event (rather than a running index) keeps the pane correct even after the
+   * rolling bar buffer trims and shifts indices.
+   */
+  public updateCvd(data: unknown): void {
+    if (!this.isValidCvdPayload(data)) {
+      console.error('Invalid CvdPayload received:', data);
+      return;
+    }
+
+    this.cvdByTs.set(data.ts_event, { cvd: data.cvd, delta: data.delta });
+    this.resyncCvd();
+    this.scheduleRedraw();
+  }
+
+  /**
+   * Rebuild the CVDPane's per-bar-index map from the ts_event-keyed store.
+   *
+   * O(n) over the current bar buffer (n <= MAX_BARS). Called whenever bars or
+   * CVD values change so the pane's index-keyed data stays aligned with the
+   * renderer's bar array after appends/replacements/trims.
+   */
+  private resyncCvd(): void {
+    if (this.cvdByTs.size === 0) {
+      return;
+    }
+    this.cvdPane.reset();
+    for (let i = 0; i < this.bars.length; i++) {
+      const entry = this.cvdByTs.get(this.bars[i].ts_event);
+      if (entry !== undefined) {
+        this.cvdPane.updateCvdData(i, entry.cvd, entry.delta);
+      }
+    }
+  }
+
+  private isValidCvdPayload(data: unknown): data is CvdPayload {
+    if (typeof data !== 'object' || data === null) {
+      return false;
+    }
+    const cvd = data as Record<string, unknown>;
+    return (
+      typeof cvd.ts_event === 'number' && Number.isFinite(cvd.ts_event) &&
+      typeof cvd.cvd === 'number' && Number.isFinite(cvd.cvd) &&
+      typeof cvd.delta === 'number' && Number.isFinite(cvd.delta)
+    );
   }
 
   public destroy(): void {
@@ -230,6 +345,12 @@ export class CanvasCandlestickRenderer implements Renderer {
 
     // Destroy reset button
     this.resetButton.destroy();
+
+    // Remove the delta toggle button
+    if (this.deltaToggleButton && this.deltaToggleButton.parentNode) {
+      this.deltaToggleButton.parentNode.removeChild(this.deltaToggleButton);
+    }
+    this.deltaToggleButton = null;
 
     // Destroy panes
     this.paneLayout.destroy();

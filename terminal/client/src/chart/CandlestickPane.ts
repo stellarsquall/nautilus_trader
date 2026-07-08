@@ -54,6 +54,12 @@ export class CandlestickPane implements Pane {
   private static readonly COLOR_LAST_PRICE = '#333333';
   private static readonly COLOR_AXIS_BG = '#f5f5f5';
 
+  // When true (default), candles are colored by order-flow delta sign
+  // (buy_volume - sell_volume): non-negative delta = green, negative = red.
+  // Bars without a delta field fall back to close/open coloring. When false,
+  // all candles use traditional close-vs-open coloring.
+  private colorByDelta = true;
+
   /**
    * Construct CandlestickPane.
    *
@@ -70,6 +76,23 @@ export class CandlestickPane implements Pane {
       initialHeight,
       this.margins
     );
+  }
+
+  /**
+   * Toggle delta-based candle coloring.
+   *
+   * @param enabled - true to color by order-flow delta sign (default),
+   *                  false to use traditional close-vs-open coloring.
+   */
+  public setColorByDelta(enabled: boolean): void {
+    this.colorByDelta = enabled;
+  }
+
+  /**
+   * Whether delta-based coloring is currently enabled.
+   */
+  public isColorByDelta(): boolean {
+    return this.colorByDelta;
   }
 
   public getValueRange(
@@ -217,8 +240,13 @@ export class CandlestickPane implements Pane {
       const highY = paneRect.y + highYRelative;
       const lowY = paneRect.y + lowYRelative;
 
-      const isBullish = bar.close >= bar.open;
-      const color = isBullish ? CandlestickPane.COLOR_UP : CandlestickPane.COLOR_DOWN;
+      // Candle color. In delta mode (default) color by order-flow delta sign
+      // when the bar carries a delta; otherwise fall back to close-vs-open.
+      const isUp =
+        this.colorByDelta && typeof bar.delta === 'number'
+          ? bar.delta >= 0
+          : bar.close >= bar.open;
+      const color = isUp ? CandlestickPane.COLOR_UP : CandlestickPane.COLOR_DOWN;
 
       ctx.fillStyle = color;
       ctx.strokeStyle = color;

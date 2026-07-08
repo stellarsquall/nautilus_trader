@@ -230,6 +230,69 @@ describe('CandlestickPane', () => {
       expect(mockCtx.fillRect).toHaveBeenCalled();
     });
 
+    // --- Delta-based coloring (slice 5) ---
+
+    const UP = '#26a69a';
+    const DOWN = '#ef5350';
+
+    // Build a ctx that records every fillStyle assignment so we can assert the
+    // candle body color (the only green/red fillStyle in the draw sequence).
+    function trackingCtx(): { ctx: CanvasRenderingContext2D; fills: string[] } {
+      const fills: string[] = [];
+      const base = {
+        save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(),
+        lineTo: vi.fn(), stroke: vi.fn(), fillRect: vi.fn(), strokeRect: vi.fn(),
+        fillText: vi.fn(), measureText: vi.fn(() => ({ width: 50 })), rect: vi.fn(),
+        clip: vi.fn(), setLineDash: vi.fn(),
+      } as Record<string, unknown>;
+      let fillStyle: string | CanvasGradient | CanvasPattern = '';
+      Object.defineProperty(base, 'fillStyle', {
+        get: () => fillStyle,
+        set: (v) => { fillStyle = v; if (typeof v === 'string') fills.push(v); },
+      });
+      return { ctx: base as unknown as CanvasRenderingContext2D, fills };
+    }
+
+    it('defaults to delta coloring enabled', () => {
+      expect(pane.isColorByDelta()).toBe(true);
+    });
+
+    it('delta mode colors a positive-delta bar green even when close < open', () => {
+      // Bearish by price (close < open) but positive order-flow delta.
+      const bar: BarPayload = { ts_event: 1000, open: 110, high: 115, low: 100, close: 105, volume: 1000, delta: 250 };
+      const { ctx, fills } = trackingCtx();
+      pane.draw(ctx, defaultPaneRect, horizontalTransform, [bar], { start: 0, end: 0 });
+      expect(fills).toContain(UP);
+      expect(fills).not.toContain(DOWN);
+    });
+
+    it('delta mode colors a negative-delta bar red even when close > open', () => {
+      // Bullish by price (close > open) but negative order-flow delta.
+      const bar: BarPayload = { ts_event: 1000, open: 100, high: 115, low: 95, close: 110, volume: 1000, delta: -250 };
+      const { ctx, fills } = trackingCtx();
+      pane.draw(ctx, defaultPaneRect, horizontalTransform, [bar], { start: 0, end: 0 });
+      expect(fills).toContain(DOWN);
+      expect(fills).not.toContain(UP);
+    });
+
+    it('falls back to close-vs-open coloring when delta is absent', () => {
+      const bar: BarPayload = { ts_event: 1000, open: 110, high: 115, low: 100, close: 105, volume: 1000 };
+      const { ctx, fills } = trackingCtx();
+      pane.draw(ctx, defaultPaneRect, horizontalTransform, [bar], { start: 0, end: 0 });
+      expect(fills).toContain(DOWN); // close < open -> red
+    });
+
+    it('setColorByDelta(false) reverts to close-vs-open even when delta present', () => {
+      // Bullish by price but negative delta; with delta coloring OFF -> green.
+      const bar: BarPayload = { ts_event: 1000, open: 100, high: 115, low: 95, close: 110, volume: 1000, delta: -250 };
+      pane.setColorByDelta(false);
+      expect(pane.isColorByDelta()).toBe(false);
+      const { ctx, fills } = trackingCtx();
+      pane.draw(ctx, defaultPaneRect, horizontalTransform, [bar], { start: 0, end: 0 });
+      expect(fills).toContain(UP);
+      expect(fills).not.toContain(DOWN);
+    });
+
     it('should handle doji (bodyHeight < 1) by drawing horizontal line', () => {
       const dojiBar: BarPayload = { ts_event: 1000, open: 100.0, high: 100.5, low: 99.5, close: 100.0, volume: 1000 };
       const visibleBarRange: BarRange = { start: 0, end: 0 };

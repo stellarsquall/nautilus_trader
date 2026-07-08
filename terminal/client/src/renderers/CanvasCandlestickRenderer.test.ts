@@ -766,4 +766,58 @@ describe('CanvasCandlestickRenderer', () => {
       renderer.destroy();
     });
   });
+
+  describe('updateCvd', () => {
+    const bar = (ts: number, delta: number): BarPayload => ({
+      ts_event: ts, open: 100, high: 110, low: 95, close: 105, volume: 1000,
+      buy_volume: 600, sell_volume: 400, delta,
+    });
+
+    it('exposes an updateCvd method', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      expect(typeof renderer.updateCvd).toBe('function');
+      renderer.destroy();
+    });
+
+    it('accepts a valid CVD payload without throwing', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      renderer.update(bar(1000, 200));
+      expect(() => renderer.updateCvd({ ts_event: 1000, cvd: 200, delta: 200 })).not.toThrow();
+      renderer.destroy();
+    });
+
+    it('rejects an invalid CVD payload and logs an error', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      renderer.updateCvd({ ts_event: 'nope' });
+      expect(spy).toHaveBeenCalled();
+      spy.mockRestore();
+      renderer.destroy();
+    });
+
+    it('tolerates a CVD payload arriving before its bar', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      // No bar with ts 2000 yet; should store and not throw.
+      expect(() => renderer.updateCvd({ ts_event: 2000, cvd: 50, delta: 50 })).not.toThrow();
+      renderer.update(bar(2000, 50));
+      renderer.destroy();
+    });
+  });
+
+  describe('delta color toggle', () => {
+    it('renders a delta-coloring toggle button into the container', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      const button = container.querySelector('button');
+      expect(button).not.toBeNull();
+      expect(button!.textContent).toContain('Color');
+      renderer.destroy();
+    });
+
+    it('removes the toggle button on destroy', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      expect(container.querySelector('button')).not.toBeNull();
+      renderer.destroy();
+      expect(container.querySelector('button')).toBeNull();
+    });
+  });
 });
