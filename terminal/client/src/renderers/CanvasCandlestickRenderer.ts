@@ -1,5 +1,5 @@
 import type { Renderer } from './Renderer';
-import type { BarPayload, CvdPayload } from '../types';
+import type { BarPayload, CvdPayload, FootprintPayload } from '../types';
 import { formatPrice, type BarRange } from '../chart/CoordinateTransform';
 import { ChartViewState } from '../chart/ChartViewState';
 import { InteractionController } from '../chart/InteractionController';
@@ -334,6 +334,12 @@ export class CanvasCandlestickRenderer implements Renderer {
       typeof cvd.cvd === 'number' && Number.isFinite(cvd.cvd) &&
       typeof cvd.delta === 'number' && Number.isFinite(cvd.delta)
     );
+  }
+
+  public updateFootprint(_data: FootprintPayload): void {
+    // Footprint rendering is handled by the VolumeProfileOverlay; this stub
+    // satisfies the Renderer interface contract. Actual visualization will be
+    // implemented in a subsequent issue.
   }
 
   public destroy(): void {
