@@ -48,6 +48,7 @@ _SHADOWED_MODULE_NAMES = (
     "nautilus_trader.model",
     "nautilus_trader.model.data",
     "nautilus_trader.model.enums",
+    "nautilus_trader.model.identifiers",
     "terminal.server.bar_streaming_actor",
 )
 _SAVED_MODULES = {name: sys.modules.get(name) for name in _SHADOWED_MODULE_NAMES}
@@ -59,6 +60,7 @@ sys.modules["nautilus_trader.config"] = MagicMock()
 sys.modules["nautilus_trader.model"] = MagicMock()
 sys.modules["nautilus_trader.model.data"] = MagicMock()
 sys.modules["nautilus_trader.model.enums"] = MagicMock()
+sys.modules["nautilus_trader.model.identifiers"] = MagicMock()
 
 # Create mock Actor base class
 class MockActorBase:
@@ -141,10 +143,11 @@ class MockBar:
 class MockTradeTick:
     """Mock TradeTick object (mimics nautilus_trader.model.data.TradeTick)."""
 
-    def __init__(self, ts_event: int, size: float, aggressor_side) -> None:
+    def __init__(self, ts_event: int, size: float, aggressor_side, price: float = 100.0) -> None:
         self.ts_event = ts_event
         self.size = size
         self.aggressor_side = aggressor_side
+        self.price = price
 
 
 @pytest.fixture
@@ -242,8 +245,8 @@ def test_envelope_structure(actor, mock_queue, mock_loop):
 
     actor.on_bar(bar)
 
-    # Dual-envelope emission: one bar envelope followed by one cvd envelope.
-    assert mock_loop.call_soon_threadsafe.call_count == 2
+    # Three-envelope emission: one bar envelope, one cvd envelope, one footprint envelope.
+    assert mock_loop.call_soon_threadsafe.call_count == 3
 
     # The bar envelope is the FIRST enqueue.
     bar_call = mock_loop.call_soon_threadsafe.call_args_list[0]
@@ -289,19 +292,20 @@ def test_sequence_monotonicity(actor, mock_queue, mock_loop):
         )
         actor.on_bar(bar)
 
-    # 10 bars × 2 envelopes (bar + cvd) = 20 enqueues.
-    assert mock_loop.call_soon_threadsafe.call_count == 20
+    # 10 bars × 3 envelopes (bar + cvd + footprint) = 30 enqueues.
+    assert mock_loop.call_soon_threadsafe.call_count == 30
 
     # Extract all sequence numbers in emission order.
     seq_numbers = [
         call[0][1]["seq"] for call in mock_loop.call_soon_threadsafe.call_args_list
     ]
 
-    # Global monotonic counter across both types: [1, 2, 3, ..., 20].
-    assert seq_numbers == list(range(1, 21))
+    # Global monotonic counter across all three types: [1, 2, 3, ..., 30].
+    assert seq_numbers == list(range(1, 31))
     assert len(set(seq_numbers)) == len(seq_numbers)  # no duplicates
 
-    # Bar envelopes take odd seqs, cvd envelopes the following even seqs.
+    # Bar envelopes take seqs 1, 4, 7, ...; cvd envelopes take 2, 5, 8, ...
+    # footprint envelopes take 3, 6, 9, ...
     bar_seqs = [
         call[0][1]["seq"]
         for call in mock_loop.call_soon_threadsafe.call_args_list
@@ -312,8 +316,14 @@ def test_sequence_monotonicity(actor, mock_queue, mock_loop):
         for call in mock_loop.call_soon_threadsafe.call_args_list
         if call[0][1]["type"] == "cvd"
     ]
-    assert bar_seqs == list(range(1, 21, 2))
-    assert cvd_seqs == list(range(2, 21, 2))
+    footprint_seqs = [
+        call[0][1]["seq"]
+        for call in mock_loop.call_soon_threadsafe.call_args_list
+        if call[0][1]["type"] == "footprint"
+    ]
+    assert bar_seqs == list(range(1, 31, 3))
+    assert cvd_seqs == list(range(2, 31, 3))
+    assert footprint_seqs == list(range(3, 31, 3))
 
 
 def test_timestamp_conversion(actor, mock_queue, mock_loop):
@@ -366,7 +376,7 @@ def test_thread_safe_enqueue_pattern(actor, mock_queue, mock_loop):
     actor.on_bar(bar)
 
     # Verify call_soon_threadsafe was used (not direct queue.put_nowait)
-    assert mock_loop.call_soon_threadsafe.call_count == 2
+    assert mock_loop.call_soon_threadsafe.call_count == 3
 
     # Verify the callable is queue.put_nowait for every enqueue
     for call in mock_loop.call_soon_threadsafe.call_args_list:
@@ -431,8 +441,8 @@ def test_delay_configuration(actor_config):
 _MIN = 60_000_000_000  # one minute in nanoseconds
 
 
-def _trade(ts_event, size, side):
-    return MockTradeTick(ts_event=ts_event, size=size, aggressor_side=side)
+def _trade(ts_event, size, side, price=100.0):
+    return MockTradeTick(ts_event=ts_event, size=size, aggressor_side=side, price=price)
 
 
 def test_trade_bucketing(actor):
