@@ -104,8 +104,8 @@ class TestLifespanStartup:
                     assert call_args[1]["delay_ms"] == 50
 
     @pytest.mark.asyncio
-    async def test_lifespan_creates_replay_buffer_with_capacity_1000(self):
-        """Lifespan creates ReplayBuffer(capacity=1000).
+    async def test_lifespan_creates_replay_buffer_with_capacity_3000(self):
+        """Lifespan creates ReplayBuffer(capacity=3000).
 
         Sized to the client renderer's MAX_BARS so a refreshed (late-joining)
         page is re-seeded with a full buffer and has immediate pan scrollback,
@@ -125,7 +125,7 @@ class TestLifespanStartup:
                     app = FastAPI()
 
                     async with lifespan(app):
-                        mock_replay_buffer.assert_called_once_with(capacity=1000)
+                        mock_replay_buffer.assert_called_once_with(capacity=3000)
 
     @pytest.mark.asyncio
     async def test_lifespan_initializes_connection_manager(self):
