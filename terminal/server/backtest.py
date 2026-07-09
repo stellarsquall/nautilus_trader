@@ -35,6 +35,7 @@ def create_backtest_queue(
     loop: asyncio.AbstractEventLoop,
     delay_ms: int = 50,
     dataset: str = "ethusdt",
+    price_bin_size: float | None = None,
 ) -> tuple[BacktestEngine, asyncio.Queue]:
     """
     Create a BacktestEngine configured to stream 1-minute Binance trade tick bars to a queue.
@@ -51,6 +52,9 @@ def create_backtest_queue(
         Playback delay in milliseconds after each bar emission.
     dataset : str, default "ethusdt"
         Dataset to load: "ethusdt" (69,806 trades CSV) or "btcusdt" (2,001 trades parquet).
+    price_bin_size : float or None, default None
+        Price bin width for footprint aggregation. If None, defaults to
+        10 * instrument.price_increment.
 
     Returns
     -------
@@ -158,11 +162,14 @@ def create_backtest_queue(
     # 1-SECOND). We pass the instrument and bar type via config instead.
     queue = asyncio.Queue()
     symbol = instrument.id.symbol.value
+    if price_bin_size is None:
+        price_bin_size = float(10 * instrument.price_increment)
     actor_config = BarStreamingActorConfig(
         delay_ms=delay_ms,
         bar_interval_ms=bar_interval_ms,
         instrument_id=str(instrument.id),
         bar_type=f"{symbol}.BINANCE-{bar_spec}",
+        price_bin_size=price_bin_size,
     )
     actor = BarStreamingActor(config=actor_config)
     actor.set_queue(queue, loop)

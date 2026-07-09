@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CanvasCandlestickRenderer } from './CanvasCandlestickRenderer';
-import type { BarPayload } from '../types';
+import type { BarPayload, FootprintPayload } from '../types';
 import { ChartViewState } from '../chart/ChartViewState';
 import { InteractionController } from '../chart/InteractionController';
 import { CrosshairOverlay } from '../chart/CrosshairOverlay';
+import { VolumeProfileOverlay } from '../chart/VolumeProfileOverlay';
 import { ResetToLatestButton } from '../chart/ResetToLatestButton';
 
 // Mock the interaction components
@@ -41,6 +42,22 @@ vi.mock('../chart/CrosshairOverlay', () => {
       setBars: vi.fn(),
       setValueResolver: vi.fn(),
       updateDimensions: vi.fn(),
+      destroy: vi.fn(),
+    })),
+  };
+});
+
+vi.mock('../chart/VolumeProfileOverlay', () => {
+  return {
+    VolumeProfileOverlay: vi.fn().mockImplementation(() => ({
+      addFootprint: vi.fn(),
+      updateFootprintData: vi.fn(),
+      clearFootprints: vi.fn(),
+      clear: vi.fn(),
+      getFootprintCount: vi.fn().mockReturnValue(0),
+      getVolumeAtPrice: vi.fn(() => null),
+      updateDimensions: vi.fn(),
+      render: vi.fn(),
       destroy: vi.fn(),
     })),
   };
@@ -818,6 +835,258 @@ describe('CanvasCandlestickRenderer', () => {
       expect(container.querySelector('button')).not.toBeNull();
       renderer.destroy();
       expect(container.querySelector('button')).toBeNull();
+    });
+  });
+
+  describe('Volume Profile toggle (AC1, AC2, AC6)', () => {
+    it('renders a Volume Profile toggle button into the container with VP: On text by default', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      const buttons = container.querySelectorAll('button');
+      // There are two buttons: delta toggle and VP toggle. Find the VP one.
+      const vpButton = Array.from(buttons).find(b => b.textContent?.startsWith('VP:'));
+      expect(vpButton).not.toBeNull();
+      expect(vpButton!.textContent).toBe('VP: On');
+      renderer.destroy();
+    });
+
+    it('toggles label to VP: Off when clicked (AC1, AC2)', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      const buttons = container.querySelectorAll('button');
+      const vpButton = Array.from(buttons).find(b => b.textContent?.startsWith('VP:'))!;
+
+      vpButton.click();
+      expect(vpButton.textContent).toBe('VP: Off');
+
+      vpButton.click();
+      expect(vpButton.textContent).toBe('VP: On');
+
+      renderer.destroy();
+    });
+
+    it('removes the VP toggle button on destroy', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      const buttons = container.querySelectorAll('button');
+      const vpButton = Array.from(buttons).find(b => b.textContent?.startsWith('VP:'));
+      expect(vpButton).not.toBeNull();
+      renderer.destroy();
+      const afterDestroy = container.querySelectorAll('button');
+      expect(afterDestroy.length).toBe(0);
+    });
+
+    it('toggle state controls overlay visibility without affecting data collection (AC6)', () => {
+      const mockAddFootprint = vi.fn();
+      (VolumeProfileOverlay as any).mockImplementation(() => ({
+        addFootprint: mockAddFootprint,
+        updateFootprintData: vi.fn(),
+        clearFootprints: vi.fn(),
+        clear: vi.fn(),
+        getFootprintCount: vi.fn().mockReturnValue(1),
+        getVolumeAtPrice: vi.fn(() => null),
+        updateDimensions: vi.fn(),
+        render: vi.fn(),
+        destroy: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+
+      // Feed footprint data - should always be collected regardless of toggle
+      const footprint: FootprintPayload = { ts_event: 1000, bin_size: 60000, levels: [] };
+      renderer.updateFootprint(footprint);
+      expect(mockAddFootprint).toHaveBeenCalledWith(footprint);
+
+      // Toggle OFF
+      const buttons = container.querySelectorAll('button');
+      const vpButton = Array.from(buttons).find(b => b.textContent?.startsWith('VP:'))!;
+      vpButton.click();
+      expect(vpButton.textContent).toBe('VP: Off');
+
+      // Data collection should still work
+      const footprint2: FootprintPayload = { ts_event: 2000, bin_size: 60000, levels: [] };
+      renderer.updateFootprint(footprint2);
+      expect(mockAddFootprint).toHaveBeenCalledWith(footprint2);
+
+      renderer.destroy();
+    });
+
+    it('clears the overlay layer when toggled off, redraws it when toggled on', () => {
+      // The overlay draws to its own canvas, so hiding it requires an explicit
+      // clear() — merely skipping render() leaves stale bars frozen on screen.
+      const mockRender = vi.fn();
+      const mockClear = vi.fn();
+      (VolumeProfileOverlay as any).mockImplementation(() => ({
+        addFootprint: vi.fn(),
+        updateFootprintData: vi.fn(),
+        clearFootprints: vi.fn(),
+        clear: mockClear,
+        getFootprintCount: vi.fn().mockReturnValue(1),
+        getVolumeAtPrice: vi.fn(() => null),
+        updateDimensions: vi.fn(),
+        render: mockRender,
+        destroy: vi.fn(),
+      }));
+
+      // Capture scheduled redraws and flush them manually. (Invoking the rAF
+      // callback inline inside requestAnimationFrame breaks the renderer's
+      // rafHandle bookkeeping, so capture-then-flush instead.)
+      let rafCb: FrameRequestCallback | null = null;
+      const rafSpy = vi
+        .spyOn(globalThis, 'requestAnimationFrame')
+        .mockImplementation((cb: FrameRequestCallback) => { rafCb = cb; return 1; });
+      const flush = (): void => { const cb = rafCb; rafCb = null; if (cb) cb(0); };
+
+      const renderer = new CanvasCandlestickRenderer(container);
+      // Feed bars so render() reaches the overlay branch (bars.length > 0).
+      for (let i = 0; i < 3; i++) {
+        renderer.update({ ts_event: 1000 + i, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 } as any);
+      }
+      flush();
+
+      const vpButton = Array.from(container.querySelectorAll('button'))
+        .find(b => b.textContent?.startsWith('VP:'))!;
+
+      // Toggle OFF -> the overlay layer must be cleared.
+      mockRender.mockClear();
+      mockClear.mockClear();
+      vpButton.click();
+      flush();
+      expect(vpButton.textContent).toBe('VP: Off');
+      expect(mockClear).toHaveBeenCalled();
+
+      // Toggle ON -> the overlay is rendered again (not left blank).
+      mockRender.mockClear();
+      vpButton.click();
+      flush();
+      expect(vpButton.textContent).toBe('VP: On');
+      expect(mockRender).toHaveBeenCalled();
+
+      rafSpy.mockRestore();
+      renderer.destroy();
+    });
+  });
+
+  describe('updateFootprint (AC3)', () => {
+    it('exposes an updateFootprint method', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      expect(typeof renderer.updateFootprint).toBe('function');
+      renderer.destroy();
+    });
+
+    it('feeds footprint data to VolumeProfileOverlay.addFootprint', () => {
+      const mockAddFootprint = vi.fn();
+      (VolumeProfileOverlay as any).mockImplementation(() => ({
+        addFootprint: mockAddFootprint,
+        updateFootprintData: vi.fn(),
+        clearFootprints: vi.fn(),
+        clear: vi.fn(),
+        getFootprintCount: vi.fn().mockReturnValue(0),
+        getVolumeAtPrice: vi.fn(() => null),
+        updateDimensions: vi.fn(),
+        render: vi.fn(),
+        destroy: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+      const footprint: FootprintPayload = {
+        ts_event: 1000,
+        bin_size: 60000,
+        levels: [{ price: 100, buy: 10, sell: 5 }],
+      };
+      renderer.updateFootprint(footprint);
+      expect(mockAddFootprint).toHaveBeenCalledWith(footprint);
+      renderer.destroy();
+    });
+  });
+
+  describe('Crosshair volume-at-price integration (AC5)', () => {
+    it('value resolver returns volume-at-price when data exists and VP visible', () => {
+      const mockGetVolumeAtPrice = vi.fn((price: number) => {
+        if (price === 100) {
+          return { buy: 200, sell: 100, total: 300 };
+        }
+        return null;
+      });
+
+      (VolumeProfileOverlay as any).mockImplementation(() => ({
+        addFootprint: vi.fn(),
+        updateFootprintData: vi.fn(),
+        clearFootprints: vi.fn(),
+        clear: vi.fn(),
+        getFootprintCount: vi.fn().mockReturnValue(1),
+        getVolumeAtPrice: mockGetVolumeAtPrice,
+        updateDimensions: vi.fn(),
+        render: vi.fn(),
+        destroy: vi.fn(),
+      }));
+
+      // Capture the value resolver function
+      let capturedResolver: ((y: number) => string | null) | null = null;
+
+      (CrosshairOverlay as any).mockImplementation(() => ({
+        setValueResolver: (fn: (y: number) => string | null) => {
+          capturedResolver = fn;
+        },
+        show: vi.fn(),
+        hide: vi.fn(),
+        setBars: vi.fn(),
+        updateDimensions: vi.fn(),
+        destroy: vi.fn(),
+      }));
+
+      // Mock PaneLayout.yToValue to return price in pane 0
+      const renderer = new CanvasCandlestickRenderer(container);
+      // Inject a mock yToValue on the paneLayout
+      (renderer as any).paneLayout.yToValue = vi.fn((y: number) => {
+        return { paneIndex: 0, value: 100 };
+      });
+
+      expect(capturedResolver).not.toBeNull();
+      const result = capturedResolver!(100);
+      expect(result).toBe('V:300 B:200 S:100');
+
+      renderer.destroy();
+    });
+
+    it('value resolver returns formatted price when VP not visible', () => {
+      let capturedResolver: ((y: number) => string | null) | null = null;
+
+      (VolumeProfileOverlay as any).mockImplementation(() => ({
+        addFootprint: vi.fn(),
+        updateFootprintData: vi.fn(),
+        clearFootprints: vi.fn(),
+        clear: vi.fn(),
+        getFootprintCount: vi.fn().mockReturnValue(0),
+        getVolumeAtPrice: vi.fn(() => null),
+        updateDimensions: vi.fn(),
+        render: vi.fn(),
+        destroy: vi.fn(),
+      }));
+
+      (CrosshairOverlay as any).mockImplementation(() => ({
+        setValueResolver: (fn: (y: number) => string | null) => {
+          capturedResolver = fn;
+        },
+        show: vi.fn(),
+        hide: vi.fn(),
+        setBars: vi.fn(),
+        updateDimensions: vi.fn(),
+        destroy: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+      // Toggle VP OFF
+      const buttons = container.querySelectorAll('button');
+      const vpButton = Array.from(buttons).find(b => b.textContent?.startsWith('VP:'))!;
+      vpButton.click();
+
+      (renderer as any).paneLayout.yToValue = vi.fn((y: number) => {
+        return { paneIndex: 0, value: 100.5 };
+      });
+
+      expect(capturedResolver).not.toBeNull();
+      const result = capturedResolver!(100);
+      expect(result).toBe('100.50');
+
+      renderer.destroy();
     });
   });
 });

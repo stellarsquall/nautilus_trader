@@ -173,14 +173,14 @@ class TestDatasetActorIntegration:
 
     @pytest.mark.timeout(60)
     def test_actor_subscription_to_trade_ticks_and_bars(self):
-        """Dual subscription (trades + bars) yields bar and cvd envelopes only."""
+        """Dual subscription (trades + bars) yields bar, cvd and footprint envelopes."""
         _ticks, envelopes = _run_and_collect("ethusdt")
         bars = [e for e in envelopes if e["type"] == "bar"]
         assert len(bars) >= 1, "Should receive bar envelopes (validates bar subscription)"
 
-        # The queue carries protocol envelopes (bar + cvd), never raw trade ticks.
-        assert {e["type"] for e in envelopes} == {"bar", "cvd"}, (
-            "Queue should only contain bar and cvd envelopes"
+        # The queue carries protocol envelopes (bar + cvd + footprint), never raw trade ticks.
+        assert {e["type"] for e in envelopes} == {"bar", "cvd", "footprint"}, (
+            "Queue should only contain bar, cvd and footprint envelopes"
         )
         # Each bar is followed by exactly one cvd envelope.
         assert sum(1 for e in envelopes if e["type"] == "cvd") == len(bars)

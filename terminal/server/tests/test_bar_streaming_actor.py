@@ -48,6 +48,7 @@ _SHADOWED_MODULE_NAMES = (
     "nautilus_trader.model",
     "nautilus_trader.model.data",
     "nautilus_trader.model.enums",
+    "nautilus_trader.model.identifiers",
     "terminal.server.bar_streaming_actor",
 )
 _SAVED_MODULES = {name: sys.modules.get(name) for name in _SHADOWED_MODULE_NAMES}
@@ -59,6 +60,7 @@ sys.modules["nautilus_trader.config"] = MagicMock()
 sys.modules["nautilus_trader.model"] = MagicMock()
 sys.modules["nautilus_trader.model.data"] = MagicMock()
 sys.modules["nautilus_trader.model.enums"] = MagicMock()
+sys.modules["nautilus_trader.model.identifiers"] = MagicMock()
 
 # Create mock Actor base class
 class MockActorBase:
@@ -141,8 +143,9 @@ class MockBar:
 class MockTradeTick:
     """Mock TradeTick object (mimics nautilus_trader.model.data.TradeTick)."""
 
-    def __init__(self, ts_event: int, size: float, aggressor_side) -> None:
+    def __init__(self, ts_event: int, price: float, size: float, aggressor_side) -> None:
         self.ts_event = ts_event
+        self.price = price
         self.size = size
         self.aggressor_side = aggressor_side
 
@@ -242,8 +245,8 @@ def test_envelope_structure(actor, mock_queue, mock_loop):
 
     actor.on_bar(bar)
 
-    # Dual-envelope emission: one bar envelope followed by one cvd envelope.
-    assert mock_loop.call_soon_threadsafe.call_count == 2
+    # Triple-envelope emission: bar, cvd, footprint.
+    assert mock_loop.call_soon_threadsafe.call_count == 3
 
     # The bar envelope is the FIRST enqueue.
     bar_call = mock_loop.call_soon_threadsafe.call_args_list[0]
@@ -273,7 +276,7 @@ def test_envelope_structure(actor, mock_queue, mock_loop):
 
 
 def test_sequence_monotonicity(actor, mock_queue, mock_loop):
-    """Test that sequence numbers are monotonic across dual-envelope emissions."""
+    """Test that sequence numbers are monotonic across triple-envelope emissions."""
     actor.set_queue(mock_queue, mock_loop)
     actor.log = MagicMock()
 
@@ -289,19 +292,19 @@ def test_sequence_monotonicity(actor, mock_queue, mock_loop):
         )
         actor.on_bar(bar)
 
-    # 10 bars × 2 envelopes (bar + cvd) = 20 enqueues.
-    assert mock_loop.call_soon_threadsafe.call_count == 20
+    # 10 bars × 3 envelopes (bar + cvd + footprint) = 30 enqueues.
+    assert mock_loop.call_soon_threadsafe.call_count == 30
 
     # Extract all sequence numbers in emission order.
     seq_numbers = [
         call[0][1]["seq"] for call in mock_loop.call_soon_threadsafe.call_args_list
     ]
 
-    # Global monotonic counter across both types: [1, 2, 3, ..., 20].
-    assert seq_numbers == list(range(1, 21))
+    # Global monotonic counter across all three types: [1, 2, 3, ..., 30].
+    assert seq_numbers == list(range(1, 31))
     assert len(set(seq_numbers)) == len(seq_numbers)  # no duplicates
 
-    # Bar envelopes take odd seqs, cvd envelopes the following even seqs.
+    # Bar envelopes: 1, 4, 7, 10, ...; cvd: 2, 5, 8, ...; footprint: 3, 6, 9, ...
     bar_seqs = [
         call[0][1]["seq"]
         for call in mock_loop.call_soon_threadsafe.call_args_list
@@ -312,8 +315,14 @@ def test_sequence_monotonicity(actor, mock_queue, mock_loop):
         for call in mock_loop.call_soon_threadsafe.call_args_list
         if call[0][1]["type"] == "cvd"
     ]
-    assert bar_seqs == list(range(1, 21, 2))
-    assert cvd_seqs == list(range(2, 21, 2))
+    fp_seqs = [
+        call[0][1]["seq"]
+        for call in mock_loop.call_soon_threadsafe.call_args_list
+        if call[0][1]["type"] == "footprint"
+    ]
+    assert bar_seqs == list(range(1, 31, 3))
+    assert cvd_seqs == list(range(2, 31, 3))
+    assert fp_seqs == list(range(3, 31, 3))
 
 
 def test_timestamp_conversion(actor, mock_queue, mock_loop):
@@ -341,8 +350,8 @@ def test_timestamp_conversion(actor, mock_queue, mock_loop):
 
         actor.on_bar(bar)
 
-        # Extract the bar envelope (first of the last bar+cvd pair).
-        bar_call = mock_loop.call_soon_threadsafe.call_args_list[-2]
+        # Extract the bar envelope (first of the last bar+cvd+footprint triple).
+        bar_call = mock_loop.call_soon_threadsafe.call_args_list[-3]
         envelope = bar_call[0][1]
 
         # Verify timestamp conversion
@@ -366,7 +375,7 @@ def test_thread_safe_enqueue_pattern(actor, mock_queue, mock_loop):
     actor.on_bar(bar)
 
     # Verify call_soon_threadsafe was used (not direct queue.put_nowait)
-    assert mock_loop.call_soon_threadsafe.call_count == 2
+    assert mock_loop.call_soon_threadsafe.call_count == 3
 
     # Verify the callable is queue.put_nowait for every enqueue
     for call in mock_loop.call_soon_threadsafe.call_args_list:
@@ -429,14 +438,15 @@ def test_delay_configuration(actor_config):
 # ------------------------------------------------------------------------------
 
 _MIN = 60_000_000_000  # one minute in nanoseconds
+_TRADE_PRICE = 100.0  # fixed price for all test trades (single bin)
 
 
-def _trade(ts_event, size, side):
-    return MockTradeTick(ts_event=ts_event, size=size, aggressor_side=side)
+def _trade(ts_event, size, side, price=_TRADE_PRICE):
+    return MockTradeTick(ts_event=ts_event, price=price, size=size, aggressor_side=side)
 
 
 def test_trade_bucketing(actor):
-    """5 BUYER trades (10.5) and 3 SELLER trades (6.2) in one minute bucket."""
+    """5 BUYER trades (10.5) and 3 SELLER trades (6.2) in one minute bucket, one price bin."""
     minute = 1_597_399_200_000_000_000  # aligned to a minute boundary
     buys = [2.0, 2.5, 2.0, 2.0, 2.0]  # sum 10.5
     sells = [2.2, 2.0, 2.0]  # sum 6.2
@@ -445,10 +455,12 @@ def test_trade_bucketing(actor):
     for i, sz in enumerate(sells):
         actor.on_trade_tick(_trade(minute + 100 + i * 1000, sz, AggressorSide.SELLER))
 
-    bucket = actor._buckets[minute]
-    assert bucket["buy_volume"] == pytest.approx(10.5, abs=0.01)
-    assert bucket["sell_volume"] == pytest.approx(6.2, abs=0.01)
-    assert bucket["buy_volume"] - bucket["sell_volume"] == pytest.approx(4.3, abs=0.01)
+    minute_bucket = actor._buckets[minute]
+    assert len(minute_bucket) == 1  # all trades at same price → one bin
+    bin_data = minute_bucket[1000]  # _TRADE_PRICE / 0.1 = 1000
+    assert bin_data["buy"] == pytest.approx(10.5, abs=0.01)
+    assert bin_data["sell"] == pytest.approx(6.2, abs=0.01)
+    assert bin_data["buy"] - bin_data["sell"] == pytest.approx(4.3, abs=0.01)
 
 
 def test_trade_bucketing_keys_by_minute(actor):
@@ -459,9 +471,9 @@ def test_trade_bucketing_keys_by_minute(actor):
     actor.on_trade_tick(_trade(m0 + _MIN - 1, 2.0, AggressorSide.SELLER))  # still m0
     actor.on_trade_tick(_trade(m1 + 5, 3.0, AggressorSide.BUYER))
     assert set(actor._buckets.keys()) == {m0, m1}
-    assert actor._buckets[m0]["buy_volume"] == pytest.approx(1.0)
-    assert actor._buckets[m0]["sell_volume"] == pytest.approx(2.0)
-    assert actor._buckets[m1]["buy_volume"] == pytest.approx(3.0)
+    assert actor._buckets[m0][1000]["buy"] == pytest.approx(1.0)
+    assert actor._buckets[m0][1000]["sell"] == pytest.approx(2.0)
+    assert actor._buckets[m1][1000]["buy"] == pytest.approx(3.0)
 
 
 def test_cvd_cumulative(actor, mock_queue, mock_loop):
@@ -577,3 +589,81 @@ def test_zero_delta_balanced_flow(actor, mock_queue, mock_loop):
     cvd_env = mock_loop.call_soon_threadsafe.call_args_list[1][0][1]
     assert cvd_env["payload"]["delta"] == 0.0
     assert cvd_env["payload"]["cvd"] == 0.0
+
+
+def test_footprint_envelope_emission(actor, mock_queue, mock_loop):
+    """Footprint envelope: buckets by price level, maintains buy/sell by aggressor,
+    seq = previous_cvd_seq + 1."""
+    import math
+
+    actor.set_queue(mock_queue, mock_loop)
+    actor.log = MagicMock()
+    start = 1_597_399_200_000_000_000
+
+    # Feed trades at three different price levels (different bins)
+    # With price_bin_size=0.1: price 100.0 → bin 1000, price 100.5 → bin 1005, price 101.0 → bin 1010
+    actor.on_trade_tick(_trade(start + 1, 2.0, AggressorSide.BUYER, price=100.0))
+    actor.on_trade_tick(_trade(start + 2, 1.5, AggressorSide.BUYER, price=100.5))
+    actor.on_trade_tick(_trade(start + 3, 3.0, AggressorSide.SELLER, price=100.0))
+    actor.on_trade_tick(_trade(start + 4, 0.5, AggressorSide.SELLER, price=101.0))
+    actor.on_trade_tick(_trade(start + 5, 1.0, AggressorSide.BUYER, price=100.0))
+
+    # Verify buckets by price level
+    minute_bucket = actor._buckets[start]
+    assert 1000 in minute_bucket  # price 100.0
+    assert 1005 in minute_bucket  # price 100.5
+    assert 1010 in minute_bucket  # price 101.0
+
+    # Verify buy/sell by aggressor side within each bin
+    assert minute_bucket[1000]["buy"] == pytest.approx(3.0)   # 2.0 + 1.0
+    assert minute_bucket[1000]["sell"] == pytest.approx(3.0)  # 3.0
+    assert minute_bucket[1005]["buy"] == pytest.approx(1.5)
+    assert minute_bucket[1005]["sell"] == pytest.approx(0.0)
+    assert minute_bucket[1010]["buy"] == pytest.approx(0.0)
+    assert minute_bucket[1010]["sell"] == pytest.approx(0.5)
+
+    # Emit bar — triggers footprint envelope with seq = previous_cvd_seq + 1
+    actor.on_bar(MockBar(start + _MIN, 100.0, 101.0, 99.0, 100.5, 7.0))
+
+    bar_env = mock_loop.call_soon_threadsafe.call_args_list[0][0][1]
+    cvd_env = mock_loop.call_soon_threadsafe.call_args_list[1][0][1]
+    fp_env = mock_loop.call_soon_threadsafe.call_args_list[2][0][1]
+
+    # Verify footprint envelope structure
+    assert fp_env["v"] == 1
+    assert fp_env["type"] == "footprint"
+    assert fp_env["seq"] == cvd_env["seq"] + 1  # seq = previous_cvd_seq + 1
+    assert "payload" in fp_env
+
+    payload = fp_env["payload"]
+    assert "ts_event" in payload
+    assert payload["bin_size"] == pytest.approx(0.1)
+    assert "levels" in payload
+    assert isinstance(payload["levels"], list)
+
+    # Verify levels sorted by price (schema: {price, buy, sell}, no bin index field)
+    prices = [l["price"] for l in payload["levels"]]
+    assert prices == sorted(prices)
+    assert prices == pytest.approx([100.0, 100.5, 101.0])
+
+    # Verify per-bin volumes (key by bin index derived from price = round(price / bin_size))
+    level_map = {round(l["price"] / 0.1): l for l in payload["levels"]}
+    assert level_map[1000]["buy"] == pytest.approx(3.0)
+    assert level_map[1000]["sell"] == pytest.approx(3.0)
+    assert level_map[1005]["buy"] == pytest.approx(1.5)
+    assert level_map[1005]["sell"] == pytest.approx(0.0)
+    assert level_map[1010]["buy"] == pytest.approx(0.0)
+    assert level_map[1010]["sell"] == pytest.approx(0.5)
+
+    # Verify all values are finite
+    for level in payload["levels"]:
+        assert math.isfinite(level["buy"])
+        assert math.isfinite(level["sell"])
+
+    # Verify footprint seq follows cvd (monotonic within bar)
+    assert fp_env["seq"] == 3
+    assert bar_env["seq"] == 1
+    assert cvd_env["seq"] == 2
+
+    # Verify bucket was cleaned up
+    assert start not in actor._buckets

@@ -321,7 +321,9 @@ export class CrosshairOverlay {
       }
     }
 
-    const boxX = 10;
+    // Sit to the right of the delta/VP toggle buttons (top-left, ending ~108px)
+    // so the hover readout no longer overlaps them.
+    const boxX = 116;
     const boxY = 10;
     const boxWidth = maxWidth + padding * 2;
     const boxHeight = lines.length * lineHeight + padding * 2;
