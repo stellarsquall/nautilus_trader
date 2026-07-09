@@ -45,6 +45,9 @@ class BarStreamingActorConfig(ActorConfig, kw_only=True, frozen=True):
         The bar type to subscribe (subscribed in on_start). Subscriptions MUST
         happen in on_start (not before engine.run), otherwise INTERNAL bar
         aggregators can backfill empty intervals and blow up memory.
+    bin_size : float, default 0.1
+        The price bin increment for footprint level aggregation. Trade prices
+        are rounded to the nearest bin_size to discretize levels.
 
     """
 
@@ -53,6 +56,7 @@ class BarStreamingActorConfig(ActorConfig, kw_only=True, frozen=True):
     bar_interval_ms: int = 60_000
     instrument_id: str | None = None
     bar_type: str | None = None
+    bin_size: float = 0.1
 
 
 class BarStreamingActor(Actor):
@@ -89,6 +93,9 @@ class BarStreamingActor(Actor):
 
         # Session-cumulative volume delta (CVD): running sum of per-bar deltas.
         self._cvd: float = 0.0
+
+        # Price bin increment for footprint level discretization.
+        self._bin_size: float = config.bin_size
 
         # Subscription targets (subscribed in on_start, per nautilus contract).
         self._instrument_id_str: str | None = config.instrument_id
@@ -144,15 +151,20 @@ class BarStreamingActor(Actor):
 
         """
         minute_key = (tick.ts_event // self._interval_ns) * self._interval_ns
+        price_bin = round(float(tick.price) / self._bin_size) * self._bin_size
         bucket = self._buckets.setdefault(
             minute_key,
-            {"buy_volume": 0.0, "sell_volume": 0.0},
+            {"buy_volume": 0.0, "sell_volume": 0.0, "levels": {}},
         )
         size = float(tick.size)
         if tick.aggressor_side == AggressorSide.BUYER:
             bucket["buy_volume"] += size
+            level = bucket["levels"].setdefault(price_bin, {"buy": 0.0, "sell": 0.0})
+            level["buy"] += size
         elif tick.aggressor_side == AggressorSide.SELLER:
             bucket["sell_volume"] += size
+            level = bucket["levels"].setdefault(price_bin, {"buy": 0.0, "sell": 0.0})
+            level["sell"] += size
 
     def on_bar(self, bar: Bar) -> None:
         """
@@ -183,7 +195,7 @@ class BarStreamingActor(Actor):
         bar_start_ns = bar.ts_event - self._interval_ns
         bucket = self._buckets.pop(
             bar_start_ns,
-            {"buy_volume": 0.0, "sell_volume": 0.0},
+            {"buy_volume": 0.0, "sell_volume": 0.0, "levels": {}},
         )
         buy_volume = bucket["buy_volume"]
         sell_volume = bucket["sell_volume"]
@@ -231,3 +243,25 @@ class BarStreamingActor(Actor):
 
         # Sleep on worker thread to create visible playback delay
         time.sleep(self._delay_seconds)
+
+        # Footprint envelope (new type: sparse volume-at-price levels).
+        levels = sorted(
+            [
+                {"price": price, "buy": level["buy"], "sell": level["sell"]}
+                for price, level in bucket.get("levels", {}).items()
+                if level["buy"] > 0 or level["sell"] > 0
+            ],
+            key=lambda x: x["price"],
+        )
+        self._seq += 1
+        footprint_envelope = {
+            "v": 1,
+            "type": "footprint",
+            "seq": self._seq,
+            "payload": {
+                "ts_event": ts_ms,
+                "bin_size": self._bin_size,
+                "levels": levels,
+            },
+        }
+        self._loop.call_soon_threadsafe(self._queue.put_nowait, footprint_envelope)
