@@ -23,6 +23,7 @@ from nautilus_trader.model.data import BarType
 from nautilus_trader.model.data import TradeTick
 from nautilus_trader.model.enums import AggressorSide
 from nautilus_trader.model.identifiers import InstrumentId
+from terminal.server.price_binning import price_bin_trades  # noqa: F401
 
 
 class BarStreamingActorConfig(ActorConfig, kw_only=True, frozen=True):
