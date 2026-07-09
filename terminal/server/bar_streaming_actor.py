@@ -158,13 +158,13 @@ class BarStreamingActor(Actor):
         minute_bucket = self._buckets.setdefault(minute_key, {})
         price_bucket = minute_bucket.setdefault(
             bin_index,
-            {"buy_volume": 0.0, "sell_volume": 0.0},
+            {"buy": 0.0, "sell": 0.0},
         )
         size = float(tick.size)
         if tick.aggressor_side == AggressorSide.BUYER:
-            price_bucket["buy_volume"] += size
+            price_bucket["buy"] += size
         elif tick.aggressor_side == AggressorSide.SELLER:
-            price_bucket["sell_volume"] += size
+            price_bucket["sell"] += size
 
     def on_bar(self, bar: Bar) -> None:
         """
@@ -194,8 +194,8 @@ class BarStreamingActor(Actor):
         # bucket (pop) to free memory; a missing bucket defaults to empty dict.
         bar_start_ns = bar.ts_event - self._interval_ns
         price_bins = self._buckets.pop(bar_start_ns, {})
-        total_buy = sum(b["buy_volume"] for b in price_bins.values())
-        total_sell = sum(b["sell_volume"] for b in price_bins.values())
+        total_buy = sum(b["buy"] for b in price_bins.values())
+        total_sell = sum(b["sell"] for b in price_bins.values())
         delta = total_buy - total_sell
 
         # Advance session-cumulative CVD.
@@ -238,8 +238,15 @@ class BarStreamingActor(Actor):
         self._loop.call_soon_threadsafe(self._queue.put_nowait, cvd_envelope)
 
         # 3. Footprint envelope (seq = previous_cvd_seq + 1)
+        levels = sorted(
+            [
+                {"price": bin_idx * self._price_bin_size, "buy": v["buy"], "sell": v["sell"]}
+                for bin_idx, v in price_bins.items()
+                if v["buy"] > 0 or v["sell"] > 0
+            ],
+            key=lambda x: x["price"],
+        )
         self._seq += 1
-        levels = sorted(price_bins.items())
         footprint_envelope = {
             "v": 1,
             "type": "footprint",
@@ -247,10 +254,7 @@ class BarStreamingActor(Actor):
             "payload": {
                 "ts_event": ts_ms,
                 "bin_size": self._price_bin_size,
-                "levels": [
-                    {"bin": bin_idx, "buy": v["buy_volume"], "sell": v["sell_volume"]}
-                    for bin_idx, v in levels
-                ],
+                "levels": levels,
             },
         }
         self._loop.call_soon_threadsafe(self._queue.put_nowait, footprint_envelope)
