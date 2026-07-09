@@ -25,6 +25,9 @@ export class VolumeProfileOverlay {
   private canvasWidth = 0;
   private canvasHeight = 0;
 
+  // Cached aggregation result for efficient crosshair lookup
+  private cachedLevels: Map<number, { buy: number; sell: number; total: number }> | null = null;
+
   private static readonly COLOR_BUY = '#26a69a';
   private static readonly COLOR_SELL = '#ef5350';
   private static readonly COLOR_POC = '#ff9800';
@@ -52,14 +55,17 @@ export class VolumeProfileOverlay {
 
   public updateFootprintData(data: Map<number, FootprintPayload>): void {
     this.footprints = data;
+    this.cachedLevels = null;
   }
 
   public addFootprint(payload: FootprintPayload): void {
     this.footprints.set(payload.ts_event, payload);
+    this.cachedLevels = null;
   }
 
   public clearFootprints(): void {
     this.footprints.clear();
+    this.cachedLevels = null;
   }
 
   public getFootprintCount(): number {
@@ -121,6 +127,23 @@ export class VolumeProfileOverlay {
         this.ctx.fill();
       }
     }
+  }
+
+  public getVolumeAtPrice(
+    price: number,
+    bars: BarPayload[],
+    visibleBarRange: BarRange
+  ): { buy: number; sell: number; total: number } | null {
+    // Use cached levels if available, otherwise compute
+    if (!this.cachedLevels) {
+      const result = this.aggregate(bars, visibleBarRange);
+      if (!result) return null;
+      this.cachedLevels = new Map();
+      for (const level of result.levels) {
+        this.cachedLevels.set(level.price, { buy: level.buy, sell: level.sell, total: level.total });
+      }
+    }
+    return this.cachedLevels.get(price) ?? null;
   }
 
   public aggregate(bars: BarPayload[], visibleBarRange: BarRange): AggregationResult | null {

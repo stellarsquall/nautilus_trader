@@ -9,6 +9,7 @@ import { PaneLayout } from '../chart/PaneLayout';
 import { CandlestickPane } from '../chart/CandlestickPane';
 import { VolumePane } from '../chart/VolumePane';
 import { CVDPane } from '../chart/CVDPane';
+import { VolumeProfileOverlay } from '../chart/VolumeProfileOverlay';
 
 /**
  * CanvasCandlestickRenderer: the app-facing Renderer.
@@ -58,6 +59,11 @@ export class CanvasCandlestickRenderer implements Renderer {
   private crosshairOverlay: CrosshairOverlay;
   private resetButton: ResetToLatestButton;
   private deltaToggleButton: HTMLButtonElement | null = null;
+
+  // Volume Profile overlay and toggle
+  private volumeProfileOverlay: VolumeProfileOverlay;
+  private volumeProfileToggleButton: HTMLButtonElement | null = null;
+  private volumeProfileVisible = true;
 
   // Vertical split: price 60%, CVD 20%, volume 20% (volume bottom = time axis)
   private static readonly PANE_HEIGHT_FRACTIONS = [0.6, 0.2, 0.2];
@@ -140,10 +146,21 @@ export class CanvasCandlestickRenderer implements Renderer {
     this.crosshairOverlay.setValueResolver((y: number): string | null => {
       const resolved = this.paneLayout.yToValue(y);
       if (!resolved) return null;
-      // Pane 0 = price (formatted), panes 1 (CVD) and 2 (volume) = integers.
-      return resolved.paneIndex === 0
-        ? formatPrice(resolved.value)
-        : Math.round(resolved.value).toString();
+
+      if (resolved.paneIndex === 0) {
+        // When Volume Profile is visible and has data at this price level,
+        // show volume-at-price instead of just the price.
+        const price = resolved.value;
+        if (this.volumeProfileVisible) {
+          const vol = this.volumeProfileOverlay.getVolumeAtPrice(price, this.bars, this.currentVisibleRange);
+          if (vol) {
+            return `V:${vol.total} B:${vol.buy} S:${vol.sell}`;
+          }
+        }
+        return formatPrice(resolved.value);
+      }
+      // Pane 1 (CVD) or 2 (volume) = integers.
+      return Math.round(resolved.value).toString();
     });
 
     // Create interaction controller with callbacks (drives the SHARED x-axis, so
@@ -178,6 +195,10 @@ export class CanvasCandlestickRenderer implements Renderer {
 
     // Create the delta-coloring toggle (delta coloring is ON by default).
     this.createDeltaToggleButton();
+
+    // Create Volume Profile Overlay (shares horizontal transform for chart width).
+    this.volumeProfileOverlay = new VolumeProfileOverlay(this.container, horizontalTransform);
+    this.createVolumeProfileToggleButton();
 
     // Initial render (blank)
     this.scheduleRedraw();
@@ -222,6 +243,39 @@ export class CanvasCandlestickRenderer implements Renderer {
     }
     this.container.appendChild(button);
     this.deltaToggleButton = button;
+  }
+
+  /**
+   * Create a toggle button for Volume Profile visibility (ON by default).
+   * Positioned below the delta toggle button with the same style.
+   */
+  private createVolumeProfileToggleButton(): void {
+    const button = document.createElement('button');
+    button.style.position = 'absolute';
+    button.style.top = '34px';
+    button.style.left = '8px';
+    button.style.zIndex = '10';
+    button.style.padding = '4px 8px';
+    button.style.font = '12px sans-serif';
+    button.style.cursor = 'pointer';
+    button.style.border = '1px solid #cccccc';
+    button.style.borderRadius = '4px';
+    button.style.background = '#ffffff';
+    button.style.color = '#333333';
+
+    const syncLabel = (): void => {
+      button.textContent = this.volumeProfileVisible ? 'VP: On' : 'VP: Off';
+    };
+    syncLabel();
+
+    button.addEventListener('click', () => {
+      this.volumeProfileVisible = !this.volumeProfileVisible;
+      syncLabel();
+      this.scheduleRedraw();
+    });
+
+    this.container.appendChild(button);
+    this.volumeProfileToggleButton = button;
   }
 
   public update(data: unknown): void {
@@ -336,10 +390,8 @@ export class CanvasCandlestickRenderer implements Renderer {
     );
   }
 
-  public updateFootprint(_data: FootprintPayload): void {
-    // Footprint rendering is handled by the VolumeProfileOverlay; this stub
-    // satisfies the Renderer interface contract. Actual visualization will be
-    // implemented in a subsequent issue.
+  public updateFootprint(data: FootprintPayload): void {
+    this.volumeProfileOverlay.addFootprint(data);
   }
 
   public destroy(): void {
@@ -357,6 +409,15 @@ export class CanvasCandlestickRenderer implements Renderer {
       this.deltaToggleButton.parentNode.removeChild(this.deltaToggleButton);
     }
     this.deltaToggleButton = null;
+
+    // Remove the volume profile toggle button
+    if (this.volumeProfileToggleButton && this.volumeProfileToggleButton.parentNode) {
+      this.volumeProfileToggleButton.parentNode.removeChild(this.volumeProfileToggleButton);
+    }
+    this.volumeProfileToggleButton = null;
+
+    // Destroy Volume Profile overlay
+    this.volumeProfileOverlay.destroy();
 
     // Destroy panes
     this.paneLayout.destroy();
@@ -466,6 +527,9 @@ export class CanvasCandlestickRenderer implements Renderer {
     // Resize crosshair overlay to match
     this.crosshairOverlay.updateDimensions(newWidth, newHeight);
 
+    // Resize Volume Profile overlay to match
+    this.volumeProfileOverlay.updateDimensions(newWidth, newHeight);
+
     // Recompute the visible window (chart dimensions changed)
     this.updateVisibleRange();
 
@@ -501,5 +565,18 @@ export class CanvasCandlestickRenderer implements Renderer {
 
     // Delegate all pane drawing (candles + volume histogram) to the layout.
     this.paneLayout.render(this.ctx, this.currentVisibleRange);
+
+    // Render Volume Profile overlay (if visible) on top of the panes.
+    if (this.volumeProfileVisible) {
+      const priceRange = this.candlestickPane.getPriceRange();
+      if (priceRange) {
+        // Configure the shared transform for the overlay's price→Y mapping.
+        // The overlay shares the horizontal transform from PaneLayout, which
+        // already has correct dimensions and margins for chart width.
+        const horizontalTransform = this.paneLayout.getHorizontalTransform();
+        horizontalTransform.setPriceRange(priceRange);
+        this.volumeProfileOverlay.render(this.bars, this.currentVisibleRange);
+      }
+    }
   }
 }

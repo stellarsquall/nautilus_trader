@@ -38,6 +38,9 @@ export class CandlestickPane implements Pane {
   // Track last pane rect to detect dimension changes
   private lastPaneRect: PaneRect | null = null;
 
+  // Current price range (updated in draw())
+  private currentPriceRange: PriceRange | null = null;
+
   // Pane-specific margins (within paneRect)
   private readonly margins: AxisMargins = {
     top: 10,
@@ -93,6 +96,15 @@ export class CandlestickPane implements Pane {
    */
   public isColorByDelta(): boolean {
     return this.colorByDelta;
+  }
+
+  /**
+   * Get the current price range used for vertical autoscaling.
+   *
+   * @returns Current PriceRange or null if no bars have been drawn yet.
+   */
+  public getPriceRange(): PriceRange | null {
+    return this.currentPriceRange;
   }
 
   public getValueRange(
@@ -152,6 +164,7 @@ export class CandlestickPane implements Pane {
 
     // Update vertical transform's price range
     this.verticalTransform.setPriceRange(priceRange);
+    this.currentPriceRange = priceRange;
 
     // Set clipping region to pane rect (optional but recommended)
     ctx.save();
