@@ -23,8 +23,8 @@ export interface Envelope {
   /** Monotonically increasing sequence number (global across all types) */
   seq: number;
 
-  /** Type-specific payload (BarPayload for 'bar', CvdPayload for 'cvd', unknown for future types) */
-  payload: BarPayload | CvdPayload | unknown;
+  /** Type-specific payload (BarPayload for 'bar', CvdPayload for 'cvd', FootprintPayload for 'footprint', unknown for future types) */
+  payload: BarPayload | CvdPayload | FootprintPayload | unknown;
 }
 
 /**
@@ -81,4 +81,38 @@ export interface CvdPayload {
 
   /** This bar's volume delta (buy_volume - sell_volume) */
   delta: number;
+}
+
+/**
+ * A single price level in a footprint chart.
+ *
+ * Captures the aggressive buy and sell volume at a specific price level within
+ * a bar, enabling order-flow analysis (footprint / market profile charts).
+ */
+export interface FootprintLevel {
+  /** Price of this level */
+  price: number;
+
+  /** Aggressive buy volume at this price level */
+  buy: number;
+
+  /** Aggressive sell volume at this price level */
+  sell: number;
+}
+
+/**
+ * Footprint (order-flow) payload for type='footprint' messages.
+ *
+ * Carries per-price-level buy/sell volume for a single bar, enabling the
+ * client to render bid/ask footprint visualizations.
+ */
+export interface FootprintPayload {
+  /** Event timestamp in milliseconds (matches the corresponding bar's ts_event) */
+  ts_event: number;
+
+  /** Bar bin size in milliseconds */
+  bin_size: number;
+
+  /** Per-price-level buy/sell volume distribution */
+  levels: FootprintLevel[];
 }

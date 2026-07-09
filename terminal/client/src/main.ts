@@ -7,7 +7,7 @@
 
 import { CandlestickPane } from './panes/CandlestickPane';
 import { CanvasCandlestickRenderer } from './renderers/CanvasCandlestickRenderer';
-import type { Envelope, CvdPayload } from './types';
+import type { Envelope, CvdPayload, FootprintPayload } from './types';
 
 // Get chart container from DOM
 const container = document.getElementById('chart-container');
@@ -39,6 +39,9 @@ ws.onmessage = (event) => {
         break;
       case 'cvd':
         renderer.updateCvd(envelope.payload as CvdPayload);
+        break;
+      case 'footprint':
+        renderer.updateFootprint(envelope.payload as FootprintPayload);
         break;
       default:
         console.warn(`Unknown message type: ${envelope.type}`);
