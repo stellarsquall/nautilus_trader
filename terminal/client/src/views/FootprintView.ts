@@ -3,6 +3,8 @@ import { ChartView, ViewType } from './ChartView.js';
 import { FootprintViewState, type BarRange } from './FootprintViewState.js';
 import { FootprintInteractionController } from './FootprintInteractionController.js';
 import { formatTime } from '../chart/CoordinateTransform.js';
+import { calculateDiagonalImbalances, calculateStackedImbalances } from './footprintImbalance.js';
+import type { DiagonalImbalanceResult, StackedImbalanceRun } from './footprintImbalance.js';
 
 export interface PocResult {
   pocPrice: number | null;
@@ -19,6 +21,8 @@ export class FootprintView implements ChartView {
   private resizeObserver: ResizeObserver | null = null;
   private interactionController: FootprintInteractionController | null = null;
   private currentDPR = 1;
+  private _imbalanceMarkersVisible = true;
+  private _imbalanceToggleButton: HTMLButtonElement | null = null;
 
   static readonly COLOR_POC = '#ff9800';
   static readonly COLOR_POC_BG = 'rgba(255, 152, 0, 0.12)';
@@ -30,6 +34,9 @@ export class FootprintView implements ChartView {
   static readonly COLOR_CELL_BORDER = '#e0e0e0';
   static readonly COLOR_TEXT = '#333333';
   static readonly COLOR_NO_DATA = '#eeeeee';
+
+  static readonly IMBALANCE_MARKER_WIDTH = 3;
+  static readonly STACKED_BRACKET_WIDTH = 4;
 
   static readonly CELL_HEIGHT = 20;
   static readonly CELL_PADDING = 4;
@@ -96,6 +103,38 @@ export class FootprintView implements ChartView {
     this.interactionController = new FootprintInteractionController(canvas, this._viewState, {
       onViewChanged: () => this.draw(),
     });
+
+    this.createImbalanceToggleButton();
+  }
+
+  private createImbalanceToggleButton(): void {
+    if (!this.container) return;
+
+    const button = document.createElement('button');
+    button.textContent = 'Imbalance: ON';
+    button.style.position = 'absolute';
+    button.style.top = '8px';
+    button.style.left = '8px';
+    button.style.zIndex = '10';
+    button.style.padding = '4px 8px';
+    button.style.font = '12px sans-serif';
+    button.style.cursor = 'pointer';
+    button.style.border = '1px solid #cccccc';
+    button.style.borderRadius = '4px';
+    button.style.background = '#ffffff';
+    button.style.color = '#333333';
+
+    button.addEventListener('click', () => {
+      this._imbalanceMarkersVisible = !this._imbalanceMarkersVisible;
+      button.textContent = this._imbalanceMarkersVisible ? 'Imbalance: ON' : 'Imbalance: OFF';
+      this.draw();
+    });
+
+    if (getComputedStyle(this.container).position === 'static') {
+      this.container.style.position = 'relative';
+    }
+    this.container.appendChild(button);
+    this._imbalanceToggleButton = button;
   }
 
   seed(state: ChartStoreState): void {
@@ -141,6 +180,12 @@ export class FootprintView implements ChartView {
   }
 
   destroy(): void {
+    if (this._imbalanceToggleButton) {
+      if (this._imbalanceToggleButton.parentNode) {
+        this._imbalanceToggleButton.parentNode.removeChild(this._imbalanceToggleButton);
+      }
+      this._imbalanceToggleButton = null;
+    }
     if (this.interactionController) {
       this.interactionController.destroy();
       this.interactionController = null;
@@ -161,6 +206,18 @@ export class FootprintView implements ChartView {
 
   getType(): ViewType {
     return ViewType.Footprint;
+  }
+
+  setImbalanceMarkersVisible(visible: boolean): void {
+    this._imbalanceMarkersVisible = visible;
+    if (this._imbalanceToggleButton) {
+      this._imbalanceToggleButton.textContent = visible ? 'Imbalance: ON' : 'Imbalance: OFF';
+    }
+    this.draw();
+  }
+
+  get imbalanceMarkersVisible(): boolean {
+    return this._imbalanceMarkersVisible;
   }
 
   private resizeCanvas(): void {
@@ -247,6 +304,32 @@ export class FootprintView implements ChartView {
     const prices = Array.from(allPrices).sort((a, b) => b - a);
     const cellHeight = FootprintView.CELL_HEIGHT;
     const pocOutlineWidth = FootprintView.POC_OUTLINE_WIDTH;
+
+    // Price-to-row mapping for bracket drawing
+    const priceToRow = new Map<number, number>();
+    for (let r = 0; r < prices.length; r++) {
+      priceToRow.set(prices[r], r);
+    }
+
+    // Pre-compute imbalance data per visible bar (at most once per bar per draw pass)
+    const barImbalances: Map<number, Map<number, DiagonalImbalanceResult>> = new Map();
+    const barStackedRuns: Map<number, StackedImbalanceRun[]> = new Map();
+    if (this._imbalanceMarkersVisible) {
+      for (const bar of visibleBars) {
+        const fp = this.footprints.get(bar.ts_event);
+        if (!fp || fp.levels.length === 0) continue;
+        const diagResults = calculateDiagonalImbalances(fp.levels, fp.bin_size);
+        const priceToDiag = new Map<number, DiagonalImbalanceResult>();
+        for (const d of diagResults) {
+          priceToDiag.set(d.price, d);
+        }
+        barImbalances.set(bar.ts_event, priceToDiag);
+        const stacked = calculateStackedImbalances(diagResults, fp.bin_size);
+        if (stacked.length > 0) {
+          barStackedRuns.set(bar.ts_event, stacked);
+        }
+      }
+    }
 
     // Calculate font size based on column width
     const fontSize = Math.max(9, Math.min(12, columnWidth / 6));
@@ -335,6 +418,21 @@ export class FootprintView implements ChartView {
           ctx.strokeRect(cellX + 1, y + 1, columnWidth - 2, cellHeight - 2);
         }
 
+        // Draw imbalance marker (edge strip)
+        if (this._imbalanceMarkersVisible) {
+          const diagMap = barImbalances.get(bar.ts_event);
+          if (diagMap) {
+            const diag = diagMap.get(level.price);
+            if (diag && diag.side === 'buy') {
+              ctx.fillStyle = FootprintView.COLOR_BUY;
+              ctx.fillRect(cellX + columnWidth - FootprintView.IMBALANCE_MARKER_WIDTH, y, FootprintView.IMBALANCE_MARKER_WIDTH, cellHeight);
+            } else if (diag && diag.side === 'sell') {
+              ctx.fillStyle = FootprintView.COLOR_SELL;
+              ctx.fillRect(cellX, y, FootprintView.IMBALANCE_MARKER_WIDTH, cellHeight);
+            }
+          }
+        }
+
         // Draw volume numbers
         const numX = cellX + columnWidth / 2;
         ctx.textAlign = 'center';
@@ -348,6 +446,32 @@ export class FootprintView implements ChartView {
           ctx.fillStyle = FootprintView.COLOR_TEXT;
         }
         ctx.fillText(volumeText, numX, y + cellHeight / 2);
+      }
+    }
+
+    // Draw stacked brackets (spans multiple price levels)
+    if (this._imbalanceMarkersVisible) {
+      for (let c = 0; c < columnCount; c++) {
+        const bar = visibleBars[c];
+        const runs = barStackedRuns.get(bar.ts_event);
+        if (!runs) continue;
+        const cellX = c * columnWidth;
+        for (const run of runs) {
+          const fromRow = priceToRow.get(run.fromPrice);
+          const toRow = priceToRow.get(run.toPrice);
+          if (fromRow === undefined || toRow === undefined) continue;
+          const topRow = Math.min(fromRow, toRow);
+          const bottomRow = Math.max(fromRow, toRow);
+          const runY = headerHeight + topRow * cellHeight;
+          const runHeight = (bottomRow - topRow + 1) * cellHeight;
+          const color = run.side === 'buy' ? FootprintView.COLOR_BUY : FootprintView.COLOR_SELL;
+          ctx.fillStyle = color;
+          if (run.side === 'buy') {
+            ctx.fillRect(cellX + columnWidth - FootprintView.STACKED_BRACKET_WIDTH, runY, FootprintView.STACKED_BRACKET_WIDTH, runHeight);
+          } else {
+            ctx.fillRect(cellX, runY, FootprintView.STACKED_BRACKET_WIDTH, runHeight);
+          }
+        }
       }
     }
   }

@@ -194,6 +194,52 @@ behavior must continue to work.
 
 ---
 
+## 3d. Slice 8 — Footprint Bid/Ask Imbalance Highlighting Verification
+
+This slice adds **bid/ask imbalance highlighting** to the dedicated **Footprint /
+Numbers-Bars view** (slice 7). Diagonal imbalances compare each price level's aggressor
+volume against the *diagonal* neighbor (ask-side buy at price `P` vs sell at `P − bin_size`;
+bid-side sell at `P` vs buy at `P + bin_size`) using a **3.0× ratio** with a
+**`MIN_IMBALANCE_VOLUME` = 1.0** noise floor; a run of **≥ 3** consecutive same-side
+imbalanced levels is a **stacked** imbalance. All highlighting is **pure client** — no
+server or protocol change (the `footprint` envelope already carries `buy`/`sell` per level).
+
+Switch to the **Footprint view** first (the view-toggle button, top-left).
+
+| # | Action | Expected | Pass? |
+|---|--------|----------|-------|
+| W1 | Enter the Footprint view and find the imbalance toggle | A button at the **top-left** reads **"Imbalance: ON"** (markers on by default); the footprint grid shows per-price buy\|sell numbers with the POC outlined | ☐ |
+| W2 | Look for **diagonal** imbalance markers on lopsided levels | A **3px edge strip**: teal **`#26a69a`** on the **right** edge for buy-dominant (ask) imbalances, red **`#ef5350`** on the **left** edge for sell-dominant (bid) imbalances | ☐ |
+| W3 | Look for **stacked** imbalance brackets | Where **≥ 3** consecutive same-side imbalances stack, a **4px bracket** spans the full height of the run (teal buy / red sell) | ☐ |
+| W4 | Click the **Imbalance** toggle | Button flips to **"Imbalance: OFF"**; all edge strips and brackets **disappear**, while the **delta backgrounds, POC outline, and buy\|sell numbers all remain**. Click again → **"Imbalance: ON"** restores markers | ☐ |
+| W5 | Switch back to the **Overview** view | Overview has **no** imbalance toggle and **no** markers (footprint-scoped). Returning to Footprint shows the toggle back at **ON** | ☐ |
+| W6 | Find a cell that is **both** POC and imbalanced | The **POC outline**, **delta background**, **volume text**, **and** the imbalance strip are all drawn together (markers coexist with, never replace, existing rendering) | ☐ |
+
+> Mechanism: a pure DOM-free detector (`views/footprintImbalance.ts`) exports
+> `calculateDiagonalImbalances(levels, binSize, opts?)` and
+> `calculateStackedImbalances(diagonalResults, binSize, minRun?)` plus tunable constants
+> `IMBALANCE_RATIO = 3.0`, `MIN_IMBALANCE_VOLUME = 1.0`, `STACKED_MIN = 3`. Adjacency is
+> **bin-index** based (`Math.round(price / binSize)`), so sparse/float levels resolve
+> without false gaps; an absent diagonal neighbor counts as 0 (ratio `Infinity`).
+> `FootprintView.drawFootprintGrid` runs the detector **once per visible bar** (never per
+> cell), draws strips and brackets in `delta bg → POC → markers → volume text` order, and
+> skips detection when the toggle is OFF. The toggle defaults ON and lives/dies with the
+> view (Overview untouched). Protocol stays **v:1** — no server change.
+
+**Isolation gates (must both output `0`):**
+
+```bash
+git diff terminal..HEAD -- crates/ nautilus_trader/ | wc -l   # core engine untouched
+git diff terminal..HEAD -- terminal/server/ | wc -l           # server untouched (pure client)
+```
+
+**Automated gates** (inside `terminal/client/`): `npx tsc --noEmit` exits 0;
+`npx vitest run` exits 0 with total passing **> 639**; `npm run build` exits 0. **Never**
+build the core engine (no `uv` / `maturin` / `cargo` / `pip -e` on the monorepo) — the
+terminal runs against the prebuilt `nautilus_trader` wheel only.
+
+---
+
 ## 4. Late-joiner check — replay buffer
 
 This proves a browser that connects *after* streaming started still sees recent history.
@@ -245,6 +291,17 @@ Confirm:
 When the slice-2 canvas checks (A–H) **and** the slice-3 interaction checks (I–T) **and**
 the slice-4 multi-pane checks (U1–U7) **and** the slice-5 order-flow checks (V1–V7) **and**
 the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
+
+**Slice 8 (footprint bid/ask imbalance highlighting) sign-off:**
+- Verified by: user + assistant (paired)   Date: 2026-07-10   Browser / OS: Chrome / macOS
+- Imbalance checks: W1 ☑ W2 ☑ W3 ☑ W4 ☑ W5 ☑ W6 ☑
+
+**Notes:** Pure-client slice on the Footprint view — diagonal 3px edge strips (teal buy /
+red sell) + 4px stacked brackets, driven by a DOM-free detector module
+(`views/footprintImbalance.ts`; `IMBALANCE_RATIO = 3.0`, `MIN_IMBALANCE_VOLUME = 1.0`,
+`STACKED_MIN = 3`), with a footprint-scoped **Imbalance: ON/OFF** toggle (default ON).
+Both isolation gates 0 (core and server untouched); `tsc` 0, `vitest` 686 passed (31
+files), `vite build` green.
 
 **Slice 5 (order-flow analytics — CVD + delta candles) sign-off:**
 - Verified by: user + assistant (paired)   Date: 2026-07-07   Browser / OS: Chrome / macOS
