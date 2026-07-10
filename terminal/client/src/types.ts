@@ -110,9 +110,26 @@ export interface FootprintPayload {
   /** Event timestamp in milliseconds (matches the corresponding bar's ts_event) */
   ts_event: number;
 
-  /** Bar bin size in milliseconds */
+  /** Price bin size (level height, in price units) */
   bin_size: number;
 
   /** Per-price-level buy/sell volume distribution */
   levels: FootprintLevel[];
+}
+
+/**
+ * Snapshot of the ChartStore's current data buffers.
+ *
+ * Returned by ChartStore.getState() for view state seeding and
+ * Pane.draw() consumption.
+ */
+export interface ChartStoreState {
+  /** Rolling buffer of bars in chronological order (newest last) */
+  bars: BarPayload[];
+
+  /** CVD data keyed by ts_event timestamp */
+  cvd: Map<number, CvdPayload>;
+
+  /** Footprint data keyed by ts_event timestamp */
+  footprints: Map<number, FootprintPayload>;
 }

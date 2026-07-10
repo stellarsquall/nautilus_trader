@@ -1,47 +1,51 @@
-/**
- * Main entry point for the NautilusTrader terminal (browser client).
- *
- * Establishes WebSocket connection to backend, instantiates chart renderer
- * and pane, and routes incoming messages to appropriate handlers.
- */
+import { ChartStore } from './store/ChartStore.js';
+import { ViewManager } from './views/ViewManager.js';
+import { ViewType } from './views/ChartView.js';
+import { OverviewView } from './views/OverviewView.js';
+import { FootprintView } from './views/FootprintView.js';
+import { ViewToggleButton } from './ui/ViewToggleButton.js';
+import type { Envelope, BarPayload, CvdPayload, FootprintPayload } from './types.js';
 
-import { CandlestickPane } from './panes/CandlestickPane';
-import { CanvasCandlestickRenderer } from './renderers/CanvasCandlestickRenderer';
-import type { Envelope, CvdPayload, FootprintPayload } from './types';
-
-// Get chart container from DOM
 const container = document.getElementById('chart-container');
 if (!container) {
   throw new Error('chart-container element not found');
 }
 
-// Instantiate renderer and pane
-const renderer = new CanvasCandlestickRenderer(container);
-const candlestickPane = new CandlestickPane(renderer);
+const chartStore = new ChartStore();
 
-// Create WebSocket connection to backend
+const viewManager = new ViewManager(chartStore, container, (type) => {
+  if (type === ViewType.Overview) return new OverviewView();
+  return new FootprintView();
+});
+
+const toggle = new ViewToggleButton(container, {
+  onViewSwitch: (viewType) => {
+    const chartViewType = viewType === 'overview' ? ViewType.Overview : ViewType.Footprint;
+    viewManager.switchToView(chartViewType);
+    toggle.setViewType(viewType);
+  },
+});
+
+viewManager.switchToView(ViewType.Overview);
+
 const ws = new WebSocket(`ws://${window.location.host}/ws`);
 
-/**
- * Handle incoming WebSocket messages.
- *
- * Parses JSON envelope and dispatches to appropriate pane handler
- * based on envelope.type.
- */
 ws.onmessage = (event) => {
   try {
     const envelope: Envelope = JSON.parse(event.data);
 
-    // Dispatch based on message type
     switch (envelope.type) {
       case 'bar':
-        candlestickPane.handleMessage(envelope);
+        chartStore.ingestBar(envelope.payload as BarPayload);
+        viewManager.updateBar(envelope.payload);
         break;
       case 'cvd':
-        renderer.updateCvd(envelope.payload as CvdPayload);
+        chartStore.ingestCvd(envelope.payload as CvdPayload);
+        viewManager.updateCvd(envelope.payload);
         break;
       case 'footprint':
-        renderer.updateFootprint(envelope.payload as FootprintPayload);
+        chartStore.ingestFootprint(envelope.payload as FootprintPayload);
+        viewManager.updateFootprint(envelope.payload as FootprintPayload);
         break;
       default:
         console.warn(`Unknown message type: ${envelope.type}`);
@@ -51,16 +55,10 @@ ws.onmessage = (event) => {
   }
 };
 
-/**
- * Handle WebSocket errors.
- */
 ws.onerror = (error) => {
   console.error('WebSocket error:', error);
 };
 
-/**
- * Handle WebSocket connection close.
- */
 ws.onclose = () => {
   console.log('WebSocket connection closed');
 };
