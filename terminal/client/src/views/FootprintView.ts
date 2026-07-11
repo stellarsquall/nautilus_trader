@@ -43,6 +43,7 @@ export class FootprintView implements ChartView {
   static readonly CELL_HEIGHT = 20;
   static readonly CELL_PADDING = 4;
   static readonly MIN_COLUMN_WIDTH = 60;
+  static readonly PRICE_AXIS_WIDTH = 56;
   static readonly POC_OUTLINE_WIDTH = 2;
 
   constructor() {
@@ -299,7 +300,18 @@ export class FootprintView implements ChartView {
     const columnCount = visibleBars.length;
     if (columnCount === 0) return;
 
-    const columnWidth = Math.max(FootprintView.MIN_COLUMN_WIDTH, width / columnCount);
+    const axisWidth = FootprintView.PRICE_AXIS_WIDTH;
+    const columnWidth = Math.max(FootprintView.MIN_COLUMN_WIDTH, (width - axisWidth) / columnCount);
+
+    // Price-label precision derived from the footprint bin size (0.1 -> 1 decimal).
+    let priceDecimals = 2;
+    for (const b of visibleBars) {
+      const bfp = this.footprints.get(b.ts_event);
+      if (bfp && bfp.bin_size > 0) {
+        priceDecimals = Math.max(0, Math.ceil(-Math.log10(bfp.bin_size) - 1e-9));
+        break;
+      }
+    }
 
     // Collect all price levels across visible bars
     const allPrices = new Set<number>();
@@ -375,7 +387,7 @@ export class FootprintView implements ChartView {
     ctx.textAlign = 'center';
     ctx.font = '11px sans-serif';
     for (let c = 0; c < columnCount; c++) {
-      const x = c * columnWidth + columnWidth / 2;
+      const x = axisWidth + c * columnWidth + columnWidth / 2;
       // Per-column time label from the bar's ts_event (updates as you pan),
       // reusing the shared formatTime helper ("HH:MM", UTC) that the overview
       // time axis and crosshair use for consistency.
@@ -398,15 +410,17 @@ export class FootprintView implements ChartView {
       ctx.lineTo(width, y + cellHeight);
       ctx.stroke();
 
-      // Price label (left side)
-      ctx.fillStyle = '#999999';
+      // Price-axis gutter (left): neutral background + right-aligned price label
+      ctx.fillStyle = '#fafafa';
+      ctx.fillRect(0, y, axisWidth, cellHeight);
+      ctx.fillStyle = '#666666';
       ctx.textAlign = 'right';
       ctx.font = '10px sans-serif';
-      ctx.fillText(price.toFixed(5), 8, y + cellHeight / 2);
+      ctx.fillText(price.toFixed(priceDecimals), axisWidth - 6, y + cellHeight / 2);
 
       for (let c = 0; c < columnCount; c++) {
         const level = barLevels[c].get(price);
-        const cellX = c * columnWidth;
+        const cellX = axisWidth + c * columnWidth;
 
         // Draw vertical separator
         if (c > 0) {
@@ -479,7 +493,7 @@ export class FootprintView implements ChartView {
         const bar = visibleBars[c];
         const runs = barStackedRuns.get(bar.ts_event);
         if (!runs) continue;
-        const cellX = c * columnWidth;
+        const cellX = axisWidth + c * columnWidth;
         for (const run of runs) {
           const fromRow = priceToRow.get(run.fromPrice);
           const toRow = priceToRow.get(run.toPrice);
@@ -498,6 +512,14 @@ export class FootprintView implements ChartView {
         }
       }
     }
+
+    // Vertical divider between the price axis and the cell grid
+    ctx.strokeStyle = '#d0d0d0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(axisWidth, headerHeight);
+    ctx.lineTo(axisWidth, height);
+    ctx.stroke();
   }
 
   private drawEmptyState(ctx: CanvasRenderingContext2D, width: number, height: number): void {

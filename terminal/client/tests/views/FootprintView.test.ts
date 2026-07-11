@@ -410,6 +410,29 @@ describe('FootprintView', () => {
       expect(mockCtx.fillText).toHaveBeenCalledWith('30 | 50', expect.any(Number), expect.any(Number));
     });
 
+    it('should render the price-axis label at bin-size precision (not the clipped over-precise form)', () => {
+      const view = new FootprintView();
+      const container = document.createElement('div');
+      container.style.width = '800px';
+      container.style.height = '600px';
+      view.mount(container);
+
+      const fp: FootprintPayload = {
+        ts_event: 100,
+        bin_size: 0.1,
+        levels: [
+          { price: 426.5, buy: 50, sell: 30 },
+        ],
+      };
+      view.updateFootprint(fp);
+      view.updateBar({ ts_event: 100, open: 426, high: 427, low: 425, close: 426.5, volume: 1000 });
+
+      // bin_size 0.1 -> 1 decimal -> '426.5' (was the clipped '426.50000')
+      const labels = mockCtx.fillText.mock.calls.map((c: unknown[]) => c[0]);
+      expect(labels).toContain('426.5');
+      expect(labels).not.toContain('426.50000');
+    });
+
     it('should render a per-column time label from bar.ts_event in the header', () => {
       const view = new FootprintView();
       const container = document.createElement('div');
