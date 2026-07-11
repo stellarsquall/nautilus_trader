@@ -24,12 +24,17 @@ describe('OverviewView + CanvasCandlestickRenderer + Value Area legend integrati
   it('getLegendEntries() includes the combined Value Area entry matching VolumeProfileOverlay color scheme', () => {
     const view = new OverviewView();
     const entries: LegendEntry[] = view.getLegendEntries();
-    expect(entries).toHaveLength(9);
+    expect(entries).toHaveLength(10);
 
     const valueAreaEntry = entries.find(e => e.label === 'Value Area (VAH/VAL)');
     expect(valueAreaEntry).toBeDefined();
     expect(valueAreaEntry!.color).toBe('#787b86');
     expect(valueAreaEntry!.kind).toBe('valueArea');
+
+    const currentPriceEntry = entries.find(e => e.label === 'Current Price');
+    expect(currentPriceEntry).toBeDefined();
+    expect(currentPriceEntry!.color).toBe('#333333');
+    expect(currentPriceEntry!.kind).toBe('dashedLine');
   });
 
   it('mount() creates CanvasCandlestickRenderer and LegendPanel with Value Area entries', () => {

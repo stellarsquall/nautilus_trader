@@ -70,6 +70,7 @@ export class OverviewView implements ChartView {
       { label: 'VP Sell', color: '#ef5350', kind: 'fill' },
       { label: 'POC', color: '#ff9800', kind: 'dot' },
       { label: 'Value Area (VAH/VAL)', color: '#787b86', kind: 'valueArea' },
+      { label: 'Current Price', color: '#333333', kind: 'dashedLine' },
     ];
   }
 }

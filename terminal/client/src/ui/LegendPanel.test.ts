@@ -179,6 +179,17 @@ describe('LegendPanel', () => {
       expect(swatch.style.background).not.toBe('');
       panel.destroy();
     });
+
+    it('dashedLine kind renders a dashed horizontal line swatch', () => {
+      const entries: LegendEntry[] = [
+        { label: 'Current Price', color: '#333333', kind: 'dashedLine' },
+      ];
+      const config: LegendPanelConfig = { entries, defaultVisible: true };
+      const panel = new LegendPanel(container, config);
+      const swatch = (container.lastChild as HTMLElement).querySelector('span') as HTMLSpanElement;
+      expect(swatch.style.borderTop).toMatch(/dashed/);
+      panel.destroy();
+    });
   });
 
   it('should remove both toggle button and panel from DOM on destroy (AC-5)', () => {

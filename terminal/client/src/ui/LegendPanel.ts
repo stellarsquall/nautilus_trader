@@ -1,4 +1,4 @@
-export type LegendKind = 'fill' | 'line' | 'outline' | 'leftStrip' | 'rightStrip' | 'bracket' | 'dot' | 'valueArea';
+export type LegendKind = 'fill' | 'line' | 'outline' | 'leftStrip' | 'rightStrip' | 'bracket' | 'dot' | 'valueArea' | 'dashedLine';
 
 export interface LegendEntry {
   label: string;
@@ -101,6 +101,11 @@ export class LegendPanel {
           swatch.style.background = '#e9eaec';
           swatch.style.borderTop = `1px dashed ${entry.color}`;
           swatch.style.borderBottom = `1px dashed ${entry.color}`;
+          swatch.style.boxSizing = 'border-box';
+          break;
+        case 'dashedLine':
+          swatch.style.borderTop = `2px dashed ${entry.color}`;
+          swatch.style.height = '14px';
           swatch.style.boxSizing = 'border-box';
           break;
       }
