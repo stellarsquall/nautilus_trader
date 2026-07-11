@@ -364,8 +364,8 @@ the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
 - Legend checks: X1 ☑ X2 ☑ X3 ☑ X4 ☑ X5 ☑ X6 ☑ X7 ☑ X8 ☑ X9 ☑ X10 ☑
 
 **Slice 10 (value area VAH/VAL) sign-off:**
-- Verified by: ______   Date: __________   Browser / OS: __________
-- Value-area checks: Y1 ☐ Y2 ☐ Y3 ☐ Y4 ☐ Y5 ☐ Y6 ☐ Y7 ☐ Y8 ☐
+- Verified by: user + assistant (paired)   Date: 2026-07-11   Browser / OS: Chrome / macOS
+- Value-area checks: Y1 ☑ Y2 ☑ Y3 ☑ Y4 ☑ Y5 ☑ Y6 ☑ Y7 ☑ Y8 ☑
 
 **Notes:** Pure-client DOM-based legend panel on the Footprint view — 6 entries (Buy/Sell
 Dominant fill, POC outline, Buy/Sell Imbalance strips, Stacked Run bracket) with matching
