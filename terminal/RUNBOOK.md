@@ -329,8 +329,8 @@ the slice-8 imbalance checks (W1–W6) **and** the slice-9 legend checks (X1–X
 the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
 
 **Slice 9 (legend panel) sign-off:**
-- Verified by: ______   Date: __________   Browser / OS: __________
-- Legend checks: X1 ☐ X2 ☐ X3 ☐ X4 ☐ X5 ☐ X6 ☐ X7 ☐ X8 ☐ X9 ☐ X10 ☐
+- Verified by: user + assistant (paired)   Date: 2026-07-11   Browser / OS: Chrome / macOS
+- Legend checks: X1 ☑ X2 ☑ X3 ☑ X4 ☑ X5 ☑ X6 ☑ X7 ☑ X8 ☑ X9 ☑ X10 ☑
 
 **Notes:** Pure-client DOM-based legend panel on the Footprint view — 6 entries (Buy/Sell
 Dominant fill, POC outline, Buy/Sell Imbalance strips, Stacked Run bracket) with matching
