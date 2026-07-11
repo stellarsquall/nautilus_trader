@@ -33,6 +33,9 @@ export class VolumeProfileOverlay {
   private static readonly COLOR_POC = '#ff9800';
   private static readonly BAR_HEIGHT_PX = 6;
   private static readonly MAX_BAR_WIDTH_RATIO = 0.6;
+  // Match VolumePane.BAR_ALPHA so the profile bars are semi-transparent and don't
+  // occlude the price-axis labels they overlap on the right margin.
+  private static readonly BAR_ALPHA = 0.72;
 
   constructor(container: HTMLElement, transform: CoordinateTransform) {
     this.transform = transform;
@@ -118,6 +121,7 @@ export class VolumeProfileOverlay {
       const totalWidth = (level.total / result.maxTotal) * maxBarLength;
       const barHeight = VolumeProfileOverlay.BAR_HEIGHT_PX;
 
+      this.ctx.globalAlpha = VolumeProfileOverlay.BAR_ALPHA;
       if (level.buy > 0) {
         const buyWidth = (level.buy / level.total) * totalWidth;
         this.ctx.fillStyle = VolumeProfileOverlay.COLOR_BUY;
@@ -131,12 +135,14 @@ export class VolumeProfileOverlay {
       }
 
       if (level.price === result.pocPrice) {
+        this.ctx.globalAlpha = 1;
         this.ctx.fillStyle = VolumeProfileOverlay.COLOR_POC;
         this.ctx.beginPath();
         this.ctx.arc(chartRightEdge, y, 3, 0, Math.PI * 2);
         this.ctx.fill();
       }
     }
+    this.ctx.globalAlpha = 1;
   }
 
   public getVolumeAtPrice(
