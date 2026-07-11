@@ -61,6 +61,7 @@ export class OverviewView implements ChartView {
   // POC (VolumeProfileOverlay #26a69a/#ef5350; POC is a filled orange dot #ff9800).
   getLegendEntries(): LegendEntry[] {
     return [
+      { label: 'Current Price', color: '#333333', kind: 'dashedLine' },
       { label: 'Delta Up', color: '#26a69a', kind: 'fill' },
       { label: 'Delta Down', color: '#ef5350', kind: 'fill' },
       { label: 'CVD Line', color: '#3f51b5', kind: 'line' },
@@ -70,7 +71,6 @@ export class OverviewView implements ChartView {
       { label: 'VP Sell', color: '#ef5350', kind: 'fill' },
       { label: 'POC', color: '#ff9800', kind: 'dot' },
       { label: 'Value Area (VAH/VAL)', color: '#787b86', kind: 'valueArea' },
-      { label: 'Current Price', color: '#333333', kind: 'dashedLine' },
     ];
   }
 }

@@ -23,16 +23,16 @@ describe('OverviewView legend (slice 9)', () => {
     const view = new OverviewView();
     const entries: LegendEntry[] = view.getLegendEntries();
     expect(entries).toHaveLength(10);
-    expect(entries[0]).toEqual({ label: 'Delta Up', color: '#26a69a', kind: 'fill' });
-    expect(entries[1]).toEqual({ label: 'Delta Down', color: '#ef5350', kind: 'fill' });
-    expect(entries[2]).toEqual({ label: 'CVD Line', color: '#3f51b5', kind: 'line' });
-    expect(entries[3]).toEqual({ label: 'Volume Up', color: '#26a69a', kind: 'fill' });
-    expect(entries[4]).toEqual({ label: 'Volume Down', color: '#ef5350', kind: 'fill' });
-    expect(entries[5]).toEqual({ label: 'VP Buy', color: '#26a69a', kind: 'fill' });
-    expect(entries[6]).toEqual({ label: 'VP Sell', color: '#ef5350', kind: 'fill' });
-    expect(entries[7]).toEqual({ label: 'POC', color: '#ff9800', kind: 'dot' });
-    expect(entries[8]).toEqual({ label: 'Value Area (VAH/VAL)', color: '#787b86', kind: 'valueArea' });
-    expect(entries[9]).toEqual({ label: 'Current Price', color: '#333333', kind: 'dashedLine' });
+    expect(entries[0]).toEqual({ label: 'Current Price', color: '#333333', kind: 'dashedLine' });
+    expect(entries[1]).toEqual({ label: 'Delta Up', color: '#26a69a', kind: 'fill' });
+    expect(entries[2]).toEqual({ label: 'Delta Down', color: '#ef5350', kind: 'fill' });
+    expect(entries[3]).toEqual({ label: 'CVD Line', color: '#3f51b5', kind: 'line' });
+    expect(entries[4]).toEqual({ label: 'Volume Up', color: '#26a69a', kind: 'fill' });
+    expect(entries[5]).toEqual({ label: 'Volume Down', color: '#ef5350', kind: 'fill' });
+    expect(entries[6]).toEqual({ label: 'VP Buy', color: '#26a69a', kind: 'fill' });
+    expect(entries[7]).toEqual({ label: 'VP Sell', color: '#ef5350', kind: 'fill' });
+    expect(entries[8]).toEqual({ label: 'POC', color: '#ff9800', kind: 'dot' });
+    expect(entries[9]).toEqual({ label: 'Value Area (VAH/VAL)', color: '#787b86', kind: 'valueArea' });
   });
 
   it('mount() creates a default-hidden LegendPanel; destroy() removes it (AC-9)', () => {
