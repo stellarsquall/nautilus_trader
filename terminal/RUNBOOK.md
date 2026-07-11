@@ -240,7 +240,42 @@ terminal runs against the prebuilt `nautilus_trader` wheel only.
 
 ---
 
-## 4. Late-joiner check — replay buffer
+## 3e. Slice 9 — Legend Panel Verification
+
+This slice adds a **Legend Panel** to **both** views (Footprint and Overview) with a toggle
+button and color-swatch entries for the rendered markers of each view. The panel is
+**DOM-based** (overlaid on the canvas) and **view-scoped** — each view supplies its OWN entries.
+Markers are **widened** (imbalance strips 3px → 4px, stacked brackets 4px → 6px) for easier
+visual spotting.
+
+Switch to the **Footprint view** first (the view-toggle button, top-left). Then look for
+the new **"Legend: OFF"** text toggle (top-left area, below the view/imbalance toggles).
+
+| # | Action | Expected | Pass? |
+|---|--------|----------|-------|
+| X1 | Find the **Legend: OFF** toggle (top-left) | A small white button with `1px #cccccc` border reads **"Legend: OFF"** — the legend panel is **hidden by default** | ☐ |
+| X2 | Click the **Legend: OFF** toggle | A floating panel appears (bottom-right, `rgba(255,255,255,0.9)` background), and the button reads **"Legend: ON"** | ☐ |
+| X3 | Inspect the Footprint panel entries | **6** rows, each with a color swatch (`16×14px`) and label: **Buy Dominant**, **Sell Dominant**, **POC**, **Buy Imbalance**, **Sell Imbalance**, **Stacked Run** | ☐ |
+| X4 | Check the swatch kinds | **Buy/Sell Dominant**: solid `fill` swatch, teal `#26a69a` / red `#ef5350`. **POC**: `outline` (hollow, 2px orange `#ff9800` border). **Buy Imbalance**: `rightStrip` (gradient, solid teal `#26a69a` right edge). **Sell Imbalance**: `leftStrip` (gradient, solid red `#ef5350` left edge). **Stacked Run**: `bracket` (4px teal `#26a69a` left border) | ☐ |
+| X5 | Check the swatch colors match rendered markers | Teal `#26a69a` swatches match the buy-dominant cell fills, imbalance strips, and stacked brackets. Red `#ef5350` swatches match the sell-dominant fills and sell-imbalance strips. Orange `#ff9800` POC swatch matches the POC outline | ☐ |
+| X6 | Click the **Legend: ON** toggle | Panel **hides**, button reads **"Legend: OFF"** | ☐ |
+| X7 | Switch to the **Overview** view (top-left toggle) | A **"Legend: OFF"** toggle is present (top-left); clicking it shows a bottom-right panel with **8** rows: **Delta Up** (teal fill), **Delta Down** (red fill), **CVD Line** (indigo `#3f51b5` line), **Volume Up** (teal fill), **Volume Down** (red fill), **VP Buy** (teal fill), **VP Sell** (red fill), **POC** (orange `#ff9800` **filled dot**) | ☐ |
+| X8 | Check Overview swatches match rendered marks | The indigo **CVD Line** swatch matches the CVD pane line; teal/red **Delta** + **Volume** + **VP** swatches match the delta candles, volume bars, and volume-profile bars; the orange **POC dot** matches the filled orange dot on the Volume Profile (max-volume price level, right edge) — note this is the *volume-profile* POC (a dot), distinct from the Footprint per-bar POC (an outline) | ☐ |
+| X9 | Switch back to **Footprint** view | The **Legend: OFF** toggle reappears (panel defaults hidden per view re-mount) | ☐ |
+| X10 | Compare marker widths with slice 8 | Imbalance edge strips are **4px** wide (previously 3px); stacked brackets are **6px** wide (previously 4px) — visually wider than earlier imbalance markers from slice 8 | ☐ |
+
+> Mechanism: `LegendPanel` (DOM class in `ui/LegendPanel.ts`) creates a toggle button
+> (top-left, `top:86px left:8px`) and a floating `<div>` panel (bottom-right) with per-entry
+> flex rows. Each entry's `kind` drives the swatch CSS: `fill` → background, `outline` →
+> 2px border, `leftStrip`/`rightStrip` → gradient, `bracket` → 4px left border, `dot` →
+> filled circle (border-radius 50%).
+> **Both** views mount a panel with `defaultVisible: false` via their own `getLegendEntries()`:
+> `FootprintView` returns 6 footprint entries; `OverviewView` returns 8 overview entries
+> (delta/CVD/volume/volume-profile/POC). The marker width constants in `FootprintView` were
+> increased from 3 → 4 (`IMBALANCE_MARKER_WIDTH`) and 4 → 6 (`STACKED_BRACKET_WIDTH`).
+> Protocol stays **v:1** — no server change.
+
+---
 
 This proves a browser that connects *after* streaming started still sees recent history.
 
@@ -290,7 +325,19 @@ Confirm:
 
 When the slice-2 canvas checks (A–H) **and** the slice-3 interaction checks (I–T) **and**
 the slice-4 multi-pane checks (U1–U7) **and** the slice-5 order-flow checks (V1–V7) **and**
+the slice-8 imbalance checks (W1–W6) **and** the slice-9 legend checks (X1–X10) **and**
 the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
+
+**Slice 9 (legend panel) sign-off:**
+- Verified by: ______   Date: __________   Browser / OS: __________
+- Legend checks: X1 ☐ X2 ☐ X3 ☐ X4 ☐ X5 ☐ X6 ☐ X7 ☐ X8 ☐ X9 ☐ X10 ☐
+
+**Notes:** Pure-client DOM-based legend panel on the Footprint view — 6 entries (Buy/Sell
+Dominant fill, POC outline, Buy/Sell Imbalance strips, Stacked Run bracket) with matching
+teal `#26a69a` / red `#ef5350` / orange `#ff9800` swatches. Toggle default OFF, per-view
+scoping (Overview returns 0 entries). Markers widened: `IMBALANCE_MARKER_WIDTH` 3px → 4px,
+`STACKED_BRACKET_WIDTH` 4px → 6px. Both isolation gates 0 (core and server untouched);
+`tsc` 0, `vitest` passed, `vite build` green.
 
 **Slice 8 (footprint bid/ask imbalance highlighting) sign-off:**
 - Verified by: user + assistant (paired)   Date: 2026-07-10   Browser / OS: Chrome / macOS

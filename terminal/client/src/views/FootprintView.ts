@@ -5,6 +5,7 @@ import { FootprintInteractionController } from './FootprintInteractionController
 import { formatTime } from '../chart/CoordinateTransform.js';
 import { calculateDiagonalImbalances, calculateStackedImbalances } from './footprintImbalance.js';
 import type { DiagonalImbalanceResult, StackedImbalanceRun } from './footprintImbalance.js';
+import { LegendPanel, type LegendEntry, type LegendPanelConfig } from '../ui/LegendPanel.js';
 
 export interface PocResult {
   pocPrice: number | null;
@@ -23,6 +24,7 @@ export class FootprintView implements ChartView {
   private currentDPR = 1;
   private _imbalanceMarkersVisible = true;
   private _imbalanceToggleButton: HTMLButtonElement | null = null;
+  private _legendPanel: LegendPanel | null = null;
 
   static readonly COLOR_POC = '#ff9800';
   static readonly COLOR_POC_BG = 'rgba(255, 152, 0, 0.12)';
@@ -35,8 +37,8 @@ export class FootprintView implements ChartView {
   static readonly COLOR_TEXT = '#333333';
   static readonly COLOR_NO_DATA = '#eeeeee';
 
-  static readonly IMBALANCE_MARKER_WIDTH = 3;
-  static readonly STACKED_BRACKET_WIDTH = 4;
+  static readonly IMBALANCE_MARKER_WIDTH = 4;
+  static readonly STACKED_BRACKET_WIDTH = 6;
 
   static readonly CELL_HEIGHT = 20;
   static readonly CELL_PADDING = 4;
@@ -105,6 +107,7 @@ export class FootprintView implements ChartView {
     });
 
     this.createImbalanceToggleButton();
+    this.mountLegendPanel();
   }
 
   private createImbalanceToggleButton(): void {
@@ -180,6 +183,10 @@ export class FootprintView implements ChartView {
   }
 
   destroy(): void {
+    if (this._legendPanel) {
+      this._legendPanel.destroy();
+      this._legendPanel = null;
+    }
     if (this._imbalanceToggleButton) {
       if (this._imbalanceToggleButton.parentNode) {
         this._imbalanceToggleButton.parentNode.removeChild(this._imbalanceToggleButton);
@@ -206,6 +213,23 @@ export class FootprintView implements ChartView {
 
   getType(): ViewType {
     return ViewType.Footprint;
+  }
+
+  getLegendEntries(): LegendEntry[] {
+    return [
+      { label: 'Buy Dominant', color: FootprintView.COLOR_BUY, kind: 'fill' },
+      { label: 'Sell Dominant', color: FootprintView.COLOR_SELL, kind: 'fill' },
+      { label: 'POC', color: FootprintView.COLOR_POC, kind: 'outline' },
+      { label: 'Buy Imbalance', color: FootprintView.COLOR_BUY, kind: 'rightStrip' },
+      { label: 'Sell Imbalance', color: FootprintView.COLOR_SELL, kind: 'leftStrip' },
+      { label: 'Stacked Run', color: FootprintView.COLOR_BUY, kind: 'bracket' },
+    ];
+  }
+
+  private mountLegendPanel(): void {
+    if (!this.container) return;
+    const config: LegendPanelConfig = { entries: this.getLegendEntries(), defaultVisible: false };
+    this._legendPanel = new LegendPanel(this.container, config);
   }
 
   setImbalanceMarkersVisible(visible: boolean): void {

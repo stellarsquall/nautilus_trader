@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FootprintView } from '../../src/views/FootprintView';
+import { LegendPanel } from '../../src/ui/LegendPanel';
 import { ViewType } from '../../src/views/ChartView';
 import { OverviewView } from '../../src/views/OverviewView';
 import type { ChartStoreState, FootprintPayload, FootprintLevel, BarPayload } from '../../src/types';
@@ -73,9 +74,12 @@ describe('FootprintView imbalance', () => {
     fillTextRecords.length = 0;
   });
 
-  it('should expose static IMBALANCE_MARKER_WIDTH === 3 and STACKED_BRACKET_WIDTH === 4', () => {
-    expect(FootprintView.IMBALANCE_MARKER_WIDTH).toBe(3);
-    expect(FootprintView.STACKED_BRACKET_WIDTH).toBe(4);
+  it('IMBALANCE_MARKER_WIDTH === 4', () => {
+    expect(FootprintView.IMBALANCE_MARKER_WIDTH).toBe(4);
+  });
+
+  it('STACKED_BRACKET_WIDTH === 6', () => {
+    expect(FootprintView.STACKED_BRACKET_WIDTH).toBe(6);
   });
 
   it('should have setImbalanceMarkersVisible and default-ON state', () => {
@@ -254,8 +258,11 @@ describe('FootprintView imbalance', () => {
       view.mount(container);
 
       const buttons = container.querySelectorAll('button');
-      expect(buttons.length).toBe(1);
-      expect(buttons[0].textContent).toContain('ON');
+      const toggleBtn = Array.from(buttons).find((b) => b.textContent?.includes('Imbalance'));
+      expect(toggleBtn).toBeDefined();
+      expect(toggleBtn!.textContent).toContain('ON');
+      // Two buttons: imbalance toggle and legend toggle
+      expect(buttons.length).toBe(2);
     });
 
     it('should NOT create an imbalance toggle button for OverviewView', () => {
@@ -342,6 +349,54 @@ describe('FootprintView imbalance', () => {
         (r) => r.w === FootprintView.IMBALANCE_MARKER_WIDTH
       );
       expect(markers.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('getLegendEntries', () => {
+    it('returns 6 LegendEntry objects with correct labels, colors, and kinds', () => {
+      const view = new FootprintView();
+      const entries = view.getLegendEntries();
+
+      expect(entries).toHaveLength(6);
+
+      const expected = [
+        { label: 'Buy Dominant', color: FootprintView.COLOR_BUY, kind: 'fill' },
+        { label: 'Sell Dominant', color: FootprintView.COLOR_SELL, kind: 'fill' },
+        { label: 'POC', color: FootprintView.COLOR_POC, kind: 'outline' },
+        { label: 'Buy Imbalance', color: FootprintView.COLOR_BUY, kind: 'rightStrip' },
+        { label: 'Sell Imbalance', color: FootprintView.COLOR_SELL, kind: 'leftStrip' },
+        { label: 'Stacked Run', color: FootprintView.COLOR_BUY, kind: 'bracket' },
+      ];
+
+      for (let i = 0; i < expected.length; i++) {
+        expect(entries[i].label).toBe(expected[i].label);
+        expect(entries[i].color).toBe(expected[i].color);
+        expect(entries[i].kind).toBe(expected[i].kind);
+      }
+    });
+  });
+
+  describe('FootprintView LegendPanel', () => {
+    it('mounts LegendPanel in mount()', () => {
+      const view = new FootprintView();
+      const container = document.createElement('div');
+      view.mount(container);
+
+      const buttons = container.querySelectorAll('button');
+      const legendBtn = Array.from(buttons).find((b) => b.textContent?.includes('Legend'));
+      expect(legendBtn).toBeDefined();
+      expect(legendBtn!.textContent).toContain('OFF');
+    });
+
+    it('destroys LegendPanel in destroy()', () => {
+      const view = new FootprintView();
+      const container = document.createElement('div');
+      view.mount(container);
+      view.destroy();
+
+      const buttons = container.querySelectorAll('button');
+      const legendBtn = Array.from(buttons).find((b) => b.textContent?.includes('Legend'));
+      expect(legendBtn).toBeUndefined();
     });
   });
 });

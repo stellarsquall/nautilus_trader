@@ -1,3 +1,4 @@
+import type { LegendEntry } from '../ui/LegendPanel.js';
 import type { ChartStoreState, FootprintPayload } from '../types.js';
 
 export enum ViewType {
@@ -13,4 +14,5 @@ export interface ChartView {
   updateFootprint(data: FootprintPayload): void;
   destroy(): void;
   getType(): ViewType;
+  getLegendEntries(): LegendEntry[];
 }
