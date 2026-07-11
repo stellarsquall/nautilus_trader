@@ -21,20 +21,15 @@ describe('OverviewView + CanvasCandlestickRenderer + Value Area legend integrati
     vi.clearAllMocks();
   });
 
-  it('getLegendEntries() includes Value Area entries matching VolumeProfileOverlay color scheme', () => {
+  it('getLegendEntries() includes the combined Value Area entry matching VolumeProfileOverlay color scheme', () => {
     const view = new OverviewView();
     const entries: LegendEntry[] = view.getLegendEntries();
-    expect(entries).toHaveLength(10);
+    expect(entries).toHaveLength(9);
 
-    const valueAreaEntry = entries.find(e => e.label === 'Value Area');
+    const valueAreaEntry = entries.find(e => e.label === 'Value Area (VAH/VAL)');
     expect(valueAreaEntry).toBeDefined();
-    expect(valueAreaEntry!.color).toBe('#c8cbd0');
-    expect(valueAreaEntry!.kind).toBe('fill');
-
-    const vahlEntry = entries.find(e => e.label === 'VAH / VAL');
-    expect(vahlEntry).toBeDefined();
-    expect(vahlEntry!.color).toBe('#787b86');
-    expect(vahlEntry!.kind).toBe('line');
+    expect(valueAreaEntry!.color).toBe('#787b86');
+    expect(valueAreaEntry!.kind).toBe('valueArea');
   });
 
   it('mount() creates CanvasCandlestickRenderer and LegendPanel with Value Area entries', () => {

@@ -317,7 +317,7 @@ view-toggle, legend, **`VA: On`** (at `top:112`).
 | Y5 | With VA off, click **`VP: On`** → **`VP: Off`** | The bars + POC dot disappear; the chart shows no profile at all (both off = overlay cleared) | ☐ |
 | Y6 | Turn **`VA: Off`** → **`VA: On`** (VP still off) | The **band + VAH/VAL lines reappear with NO bars and NO POC dot** (the two toggles are independent) | ☐ |
 | Y7 | Turn **`VP: Off`** → **`VP: On`** | Bars + POC dot come back alongside the value area | ☐ |
-| Y8 | Open the **Legend** (bottom-right) | Two new rows: **Value Area** (light slate `fill` swatch) and **VAH / VAL** (grey `line` swatch) — 10 entries total | ☐ |
+| Y8 | Open the **Legend** (bottom-right) | One new row: **Value Area (VAH/VAL)** — a composite swatch showing a light band with dashed top/bottom edges (mirroring the on-chart band + VAH/VAL lines) — 9 entries total | ☐ |
 
 > Mechanism: pure `chart/valueArea.ts` (`calculateValueArea`, `VALUE_AREA_PCT=0.70`) expands
 > outward from the POC adding the larger-volume neighbor until ≥70% of volume, guaranteeing

@@ -166,6 +166,19 @@ describe('LegendPanel', () => {
       expect(swatch.style.background).toMatch(/rgb\(255,\s*152,\s*0\)/);
       panel.destroy();
     });
+
+    it('valueArea kind renders a filled band with dashed top/bottom edges', () => {
+      const entries: LegendEntry[] = [
+        { label: 'Value Area (VAH/VAL)', color: '#787b86', kind: 'valueArea' },
+      ];
+      const config: LegendPanelConfig = { entries, defaultVisible: true };
+      const panel = new LegendPanel(container, config);
+      const swatch = (container.lastChild as HTMLElement).querySelector('span') as HTMLSpanElement;
+      expect(swatch.style.borderTop).toMatch(/dashed/);
+      expect(swatch.style.borderBottom).toMatch(/dashed/);
+      expect(swatch.style.background).not.toBe('');
+      panel.destroy();
+    });
   });
 
   it('should remove both toggle button and panel from DOM on destroy (AC-5)', () => {

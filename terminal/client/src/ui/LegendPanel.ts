@@ -1,4 +1,4 @@
-export type LegendKind = 'fill' | 'line' | 'outline' | 'leftStrip' | 'rightStrip' | 'bracket' | 'dot';
+export type LegendKind = 'fill' | 'line' | 'outline' | 'leftStrip' | 'rightStrip' | 'bracket' | 'dot' | 'valueArea';
 
 export interface LegendEntry {
   label: string;
@@ -95,6 +95,13 @@ export class LegendPanel {
           swatch.style.height = '10px';
           swatch.style.borderRadius = '50%';
           swatch.style.margin = '0 3px';
+          break;
+        case 'valueArea':
+          // Composite: the translucent band with its dashed VAH/VAL edges.
+          swatch.style.background = '#e9eaec';
+          swatch.style.borderTop = `1px dashed ${entry.color}`;
+          swatch.style.borderBottom = `1px dashed ${entry.color}`;
+          swatch.style.boxSizing = 'border-box';
           break;
       }
 
