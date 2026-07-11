@@ -9,6 +9,8 @@ export interface LegendEntry {
 export interface LegendPanelConfig {
   entries: LegendEntry[];
   defaultVisible?: boolean;
+  toggleTop?: string;
+  toggleLeft?: string;
 }
 
 export class LegendPanel {
@@ -24,8 +26,8 @@ export class LegendPanel {
     this.toggleButton = document.createElement('button');
     this.toggleButton.textContent = this.visible ? 'Legend: ON' : 'Legend: OFF';
     this.toggleButton.style.position = 'absolute';
-    this.toggleButton.style.top = '86px';
-    this.toggleButton.style.left = '8px';
+    this.toggleButton.style.top = config.toggleTop ?? '86px';
+    this.toggleButton.style.left = config.toggleLeft ?? '8px';
     this.toggleButton.style.zIndex = '10';
     this.toggleButton.style.padding = '4px 8px';
     this.toggleButton.style.font = '12px sans-serif';

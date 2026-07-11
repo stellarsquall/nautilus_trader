@@ -193,6 +193,20 @@ describe('LegendPanel', () => {
     expect(container.children.length).toBe(0);
   });
 
+  it('config toggleTop/toggleLeft override the default toggle placement', () => {
+    const config: LegendPanelConfig = {
+      entries: sampleEntries,
+      defaultVisible: false,
+      toggleTop: '84px',
+      toggleLeft: '64px',
+    };
+    const panel = new LegendPanel(container, config);
+    const button = container.querySelector('button') as HTMLButtonElement;
+    expect(button.style.top).toBe('84px');
+    expect(button.style.left).toBe('64px');
+    panel.destroy();
+  });
+
   it('should create button with correct styles (AC-1)', () => {
     const config: LegendPanelConfig = { entries: sampleEntries, defaultVisible: false };
     const panel = new LegendPanel(container, config);

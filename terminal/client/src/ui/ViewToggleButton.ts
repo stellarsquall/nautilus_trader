@@ -43,6 +43,12 @@ export class ViewToggleButton {
     return this.currentView === 'overview' ? 'Overview' : 'Footprint';
   }
 
+  /** Reposition the toggle (view-aware: Footprint moves it clear of the left price axis). */
+  setPosition(top: string, left: string): void {
+    this.button.style.top = top;
+    this.button.style.left = left;
+  }
+
   public setViewType(viewType: ViewType): void {
     this.currentView = viewType;
     this.button.textContent = this.getLabel();

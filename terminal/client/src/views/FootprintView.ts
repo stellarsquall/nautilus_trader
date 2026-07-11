@@ -117,8 +117,9 @@ export class FootprintView implements ChartView {
     const button = document.createElement('button');
     button.textContent = 'Imbalance: ON';
     button.style.position = 'absolute';
-    button.style.top = '8px';
-    button.style.left = '8px';
+    // Footprint safe zone: below the 24px time header, right of the 56px price axis.
+    button.style.top = '32px';
+    button.style.left = '64px';
     button.style.zIndex = '10';
     button.style.padding = '4px 8px';
     button.style.font = '12px sans-serif';
@@ -229,7 +230,13 @@ export class FootprintView implements ChartView {
 
   private mountLegendPanel(): void {
     if (!this.container) return;
-    const config: LegendPanelConfig = { entries: this.getLegendEntries(), defaultVisible: false };
+    const config: LegendPanelConfig = {
+      entries: this.getLegendEntries(),
+      defaultVisible: false,
+      // Footprint safe zone: stacked below the Imbalance + view toggles.
+      toggleTop: '84px',
+      toggleLeft: '64px',
+    };
     this._legendPanel = new LegendPanel(this.container, config);
   }
 

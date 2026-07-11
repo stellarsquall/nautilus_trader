@@ -23,6 +23,13 @@ const toggle = new ViewToggleButton(container, {
     const chartViewType = viewType === 'overview' ? ViewType.Overview : ViewType.Footprint;
     viewManager.switchToView(chartViewType);
     toggle.setViewType(viewType);
+    // Footprint has a left price-axis gutter + top time header; move the view toggle
+    // into the footprint safe zone (right of axis, below header). Overview keeps top-left.
+    if (viewType === 'footprint') {
+      toggle.setPosition('58px', '64px');
+    } else {
+      toggle.setPosition('60px', '8px');
+    }
   },
 });
 

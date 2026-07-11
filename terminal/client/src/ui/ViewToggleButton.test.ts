@@ -124,4 +124,15 @@ describe('ViewToggleButton', () => {
 
     expect(callbacks.onViewSwitch).not.toHaveBeenCalled();
   });
+
+  it('setPosition() updates the toggle top/left (view-aware placement)', () => {
+    toggleButton = new ViewToggleButton(container, callbacks);
+    const button = container.querySelector('button') as HTMLButtonElement;
+    expect(button.style.top).toBe('60px');
+    expect(button.style.left).toBe('8px');
+
+    toggleButton.setPosition('58px', '64px');
+    expect(button.style.top).toBe('58px');
+    expect(button.style.left).toBe('64px');
+  });
 });
