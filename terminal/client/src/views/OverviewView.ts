@@ -69,6 +69,8 @@ export class OverviewView implements ChartView {
       { label: 'VP Buy', color: '#26a69a', kind: 'fill' },
       { label: 'VP Sell', color: '#ef5350', kind: 'fill' },
       { label: 'POC', color: '#ff9800', kind: 'dot' },
+      { label: 'Value Area', color: '#c8cbd0', kind: 'fill' },
+      { label: 'VAH / VAL', color: '#787b86', kind: 'line' },
     ];
   }
 }
