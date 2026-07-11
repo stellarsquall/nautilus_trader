@@ -68,11 +68,15 @@ export class LegendPanel {
         case 'fill':
           swatch.style.background = entry.color;
           break;
-        case 'line':
-          swatch.style.borderTop = `3px solid ${entry.color}`;
-          swatch.style.height = '14px';
-          swatch.style.boxSizing = 'border-box';
+        case 'line': {
+          swatch.style.display = 'flex';
+          swatch.style.alignItems = 'center';
+          const lineEl = document.createElement('span');
+          lineEl.style.width = '100%';
+          lineEl.style.borderTop = `3px solid ${entry.color}`;
+          swatch.appendChild(lineEl);
           break;
+        }
         case 'outline':
           swatch.style.border = `2px solid ${entry.color}`;
           swatch.style.background = 'transparent';
@@ -103,11 +107,15 @@ export class LegendPanel {
           swatch.style.borderBottom = `1px dashed ${entry.color}`;
           swatch.style.boxSizing = 'border-box';
           break;
-        case 'dashedLine':
-          swatch.style.borderTop = `2px dashed ${entry.color}`;
-          swatch.style.height = '14px';
-          swatch.style.boxSizing = 'border-box';
+        case 'dashedLine': {
+          swatch.style.display = 'flex';
+          swatch.style.alignItems = 'center';
+          const lineEl = document.createElement('span');
+          lineEl.style.width = '100%';
+          lineEl.style.borderTop = `2px dashed ${entry.color}`;
+          swatch.appendChild(lineEl);
           break;
+        }
       }
 
       const label = document.createElement('span');

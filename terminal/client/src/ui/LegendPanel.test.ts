@@ -71,7 +71,7 @@ describe('LegendPanel', () => {
     const rows = panelDiv.querySelectorAll('div');
     expect(rows.length).toBe(3);
     rows.forEach((row, i) => {
-      const labelSpan = row.querySelector('span:last-child') as HTMLSpanElement;
+      const labelSpan = row.lastElementChild as HTMLSpanElement;
       expect(labelSpan.textContent).toBe(entries[i].label);
     });
     panel.destroy();
@@ -91,15 +91,17 @@ describe('LegendPanel', () => {
       panel.destroy();
     });
 
-    it('line kind renders horizontal line via border-top', () => {
+    it('line kind renders a vertically-centered horizontal line via a child element', () => {
       const entries: LegendEntry[] = [
         { label: 'Line', color: '#00ff00', kind: 'line' },
       ];
       const config: LegendPanelConfig = { entries, defaultVisible: true };
       const panel = new LegendPanel(container, config);
       const swatch = (container.lastChild as HTMLElement).querySelector('span') as HTMLSpanElement;
-      expect(swatch.style.borderTop).toMatch(/3px/);
-      expect(swatch.style.borderTop).toMatch(/rgb\(0,\s*255,\s*0\)/);
+      expect(swatch.style.alignItems).toBe('center');
+      const lineEl = swatch.querySelector('span') as HTMLSpanElement;
+      expect(lineEl.style.borderTop).toMatch(/3px/);
+      expect(lineEl.style.borderTop).toMatch(/rgb\(0,\s*255,\s*0\)/);
       panel.destroy();
     });
 
@@ -180,14 +182,16 @@ describe('LegendPanel', () => {
       panel.destroy();
     });
 
-    it('dashedLine kind renders a dashed horizontal line swatch', () => {
+    it('dashedLine kind renders a vertically-centered dashed line via a child element', () => {
       const entries: LegendEntry[] = [
         { label: 'Current Price', color: '#333333', kind: 'dashedLine' },
       ];
       const config: LegendPanelConfig = { entries, defaultVisible: true };
       const panel = new LegendPanel(container, config);
       const swatch = (container.lastChild as HTMLElement).querySelector('span') as HTMLSpanElement;
-      expect(swatch.style.borderTop).toMatch(/dashed/);
+      expect(swatch.style.alignItems).toBe('center');
+      const lineEl = swatch.querySelector('span') as HTMLSpanElement;
+      expect(lineEl.style.borderTop).toMatch(/dashed/);
       panel.destroy();
     });
   });
