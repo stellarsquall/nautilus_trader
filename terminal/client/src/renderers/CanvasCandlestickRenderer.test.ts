@@ -58,6 +58,9 @@ vi.mock('../chart/VolumeProfileOverlay', () => {
       getVolumeAtPrice: vi.fn(() => null),
       updateDimensions: vi.fn(),
       render: vi.fn(),
+      setBarsVisible: vi.fn(),
+      setValueAreaVisible: vi.fn(),
+      isValueAreaVisible: vi.fn().mockReturnValue(true),
       destroy: vi.fn(),
     })),
   };
@@ -838,6 +841,58 @@ describe('CanvasCandlestickRenderer', () => {
     });
   });
 
+  describe('Value Area toggle (slice 10)', () => {
+    it('renders a standalone VA toggle at top:112 left:8, default VA: On', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      const vaButton = Array.from(container.querySelectorAll('button'))
+        .find(b => b.textContent?.startsWith('VA:')) as HTMLButtonElement;
+      expect(vaButton).toBeTruthy();
+      expect(vaButton.textContent).toBe('VA: On');
+      expect(vaButton.style.top).toBe('112px');
+      expect(vaButton.style.left).toBe('8px');
+      renderer.destroy();
+    });
+
+    it('clicking the VA toggle flips the label and calls overlay.setValueAreaVisible', () => {
+      const mockSetVA = vi.fn();
+      (VolumeProfileOverlay as any).mockImplementation(() => ({
+        addFootprint: vi.fn(),
+        updateFootprintData: vi.fn(),
+        clearFootprints: vi.fn(),
+        clear: vi.fn(),
+        getFootprintCount: vi.fn().mockReturnValue(0),
+        getVolumeAtPrice: vi.fn(() => null),
+        updateDimensions: vi.fn(),
+        render: vi.fn(),
+        setBarsVisible: vi.fn(),
+        setValueAreaVisible: mockSetVA,
+        isValueAreaVisible: vi.fn().mockReturnValue(true),
+        destroy: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+      const vaButton = Array.from(container.querySelectorAll('button'))
+        .find(b => b.textContent?.startsWith('VA:')) as HTMLButtonElement;
+
+      vaButton.click();
+      expect(vaButton.textContent).toBe('VA: Off');
+      expect(mockSetVA).toHaveBeenCalledWith(false);
+
+      vaButton.click();
+      expect(vaButton.textContent).toBe('VA: On');
+      expect(mockSetVA).toHaveBeenCalledWith(true);
+
+      renderer.destroy();
+    });
+
+    it('removes the VA toggle button on destroy', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      expect(Array.from(container.querySelectorAll('button')).some(b => b.textContent?.startsWith('VA:'))).toBe(true);
+      renderer.destroy();
+      expect(Array.from(container.querySelectorAll('button')).some(b => b.textContent?.startsWith('VA:'))).toBe(false);
+    });
+  });
+
   describe('Volume Profile toggle (AC1, AC2, AC6)', () => {
     it('renders a Volume Profile toggle button into the container with VP: On text by default', () => {
       const renderer = new CanvasCandlestickRenderer(container);
@@ -884,6 +939,9 @@ describe('CanvasCandlestickRenderer', () => {
         getVolumeAtPrice: vi.fn(() => null),
         updateDimensions: vi.fn(),
         render: vi.fn(),
+        setBarsVisible: vi.fn(),
+        setValueAreaVisible: vi.fn(),
+        isValueAreaVisible: vi.fn().mockReturnValue(true),
         destroy: vi.fn(),
       }));
 
@@ -908,11 +966,14 @@ describe('CanvasCandlestickRenderer', () => {
       renderer.destroy();
     });
 
-    it('clears the overlay layer when toggled off, redraws it when toggled on', () => {
-      // The overlay draws to its own canvas, so hiding it requires an explicit
-      // clear() — merely skipping render() leaves stale bars frozen on screen.
+    it('clears the overlay only when BOTH VP and VA are off; renders if either is on', () => {
+      // The overlay draws to its own canvas. With the standalone Value Area
+      // toggle, the overlay renders when EITHER VP-bars or VA is on, and is
+      // cleared only when BOTH are off.
       const mockRender = vi.fn();
       const mockClear = vi.fn();
+      const mockSetBars = vi.fn();
+      const mockSetVA = vi.fn();
       (VolumeProfileOverlay as any).mockImplementation(() => ({
         addFootprint: vi.fn(),
         updateFootprintData: vi.fn(),
@@ -922,12 +983,12 @@ describe('CanvasCandlestickRenderer', () => {
         getVolumeAtPrice: vi.fn(() => null),
         updateDimensions: vi.fn(),
         render: mockRender,
+        setBarsVisible: mockSetBars,
+        setValueAreaVisible: mockSetVA,
+        isValueAreaVisible: vi.fn().mockReturnValue(true),
         destroy: vi.fn(),
       }));
 
-      // Capture scheduled redraws and flush them manually. (Invoking the rAF
-      // callback inline inside requestAnimationFrame breaks the renderer's
-      // rafHandle bookkeeping, so capture-then-flush instead.)
       let rafCb: FrameRequestCallback | null = null;
       const rafSpy = vi
         .spyOn(globalThis, 'requestAnimationFrame')
@@ -935,7 +996,6 @@ describe('CanvasCandlestickRenderer', () => {
       const flush = (): void => { const cb = rafCb; rafCb = null; if (cb) cb(0); };
 
       const renderer = new CanvasCandlestickRenderer(container);
-      // Feed bars so render() reaches the overlay branch (bars.length > 0).
       for (let i = 0; i < 3; i++) {
         renderer.update({ ts_event: 1000 + i, open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 } as any);
       }
@@ -943,16 +1003,27 @@ describe('CanvasCandlestickRenderer', () => {
 
       const vpButton = Array.from(container.querySelectorAll('button'))
         .find(b => b.textContent?.startsWith('VP:'))!;
+      const vaButton = Array.from(container.querySelectorAll('button'))
+        .find(b => b.textContent?.startsWith('VA:'))!;
 
-      // Toggle OFF -> the overlay layer must be cleared.
-      mockRender.mockClear();
-      mockClear.mockClear();
+      // VP OFF while VA still ON -> overlay still renders (VA), NOT cleared; bars hidden.
+      mockRender.mockClear(); mockClear.mockClear();
       vpButton.click();
       flush();
       expect(vpButton.textContent).toBe('VP: Off');
+      expect(mockSetBars).toHaveBeenCalledWith(false);
+      expect(mockRender).toHaveBeenCalled();
+      expect(mockClear).not.toHaveBeenCalled();
+
+      // VA OFF too -> BOTH off -> overlay cleared.
+      mockRender.mockClear(); mockClear.mockClear();
+      vaButton.click();
+      flush();
+      expect(vaButton.textContent).toBe('VA: Off');
+      expect(mockSetVA).toHaveBeenCalledWith(false);
       expect(mockClear).toHaveBeenCalled();
 
-      // Toggle ON -> the overlay is rendered again (not left blank).
+      // VP ON again -> overlay renders again.
       mockRender.mockClear();
       vpButton.click();
       flush();

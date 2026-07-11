@@ -12,6 +12,10 @@ const createMockContext = () => {
     beginPath: vi.fn(),
     arc: vi.fn(),
     fill: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    setLineDash: vi.fn(),
     setTransform: vi.fn(),
     save: vi.fn(),
     restore: vi.fn(),
@@ -278,6 +282,41 @@ describe('VolumeProfileOverlay', () => {
       expect(mockContext.beginPath).toHaveBeenCalled();
       expect(mockContext.arc).toHaveBeenCalled();
       expect(mockContext.fill).toHaveBeenCalled();
+    });
+
+    it('draws the value-area band + dashed VAH/VAL lines when VA is visible (slice 10)', () => {
+      overlay.updateFootprintData(sampleFootprints);
+      overlay.render(sampleBars, { start: 0, end: 2 });
+      const fillStyleValues = (mockContext as any)._fillStyleValues as string[];
+      expect(fillStyleValues).toContain('rgba(120, 123, 134, 0.12)');
+      expect(mockContext.setLineDash).toHaveBeenCalledWith([4, 3]);
+    });
+
+    it('isValueAreaVisible reflects setValueAreaVisible; hidden VA draws no band/lines', () => {
+      expect(overlay.isValueAreaVisible()).toBe(true);
+      overlay.setValueAreaVisible(false);
+      expect(overlay.isValueAreaVisible()).toBe(false);
+
+      overlay.updateFootprintData(sampleFootprints);
+      overlay.render(sampleBars, { start: 0, end: 2 });
+      const fillStyleValues = (mockContext as any)._fillStyleValues as string[];
+      expect(fillStyleValues).not.toContain('rgba(120, 123, 134, 0.12)');
+      expect(mockContext.setLineDash).not.toHaveBeenCalled();
+      // bars still drawn (independent of VA)
+      expect(fillStyleValues).toContain('#26a69a');
+    });
+
+    it('setBarsVisible(false) hides bars + POC but keeps the value area (independent toggles)', () => {
+      overlay.setBarsVisible(false);
+      overlay.updateFootprintData(sampleFootprints);
+      overlay.render(sampleBars, { start: 0, end: 2 });
+      const fillStyleValues = (mockContext as any)._fillStyleValues as string[];
+      // no buy/sell bars, no POC dot
+      expect(fillStyleValues).not.toContain('#26a69a');
+      expect(fillStyleValues).not.toContain('#ef5350');
+      expect(mockContext.arc).not.toHaveBeenCalled();
+      // value-area band still drawn
+      expect(fillStyleValues).toContain('rgba(120, 123, 134, 0.12)');
     });
 
     it('should clear canvas before rendering', () => {

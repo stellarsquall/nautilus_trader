@@ -298,6 +298,37 @@ Confirm:
 
 ---
 
+## 3f. Slice 10 — Value Area (VAH/VAL) Verification
+
+This slice adds the **Value Area** to the Overview **Volume Profile**: the price range holding
+~70% of the visible-range traded volume around the POC, shown as a translucent **band** plus
+**VAH/VAL** dashed reference lines, behind a **standalone** `VA: On/Off` toggle (default ON,
+independent of the VP-bars toggle). Overview only — the Footprint view is unchanged.
+
+Stay on the **Overview** view. The left button stack (top-left) is now: delta, `VP: On`,
+view-toggle, legend, **`VA: On`** (at `top:112`).
+
+| # | Action | Expected | Pass? |
+|---|--------|----------|-------|
+| Y1 | Find the **`VA: On`** toggle (top-left, below the Legend toggle) | A white button reads **"VA: On"** — value area is **shown by default** | ☐ |
+| Y2 | Look at the Volume Profile (right side) | A **translucent slate band** spans a contiguous price range around the POC dot, with **dashed grey horizontal lines** at its top (**VAH**) and bottom (**VAL**) edges | ☐ |
+| Y3 | Sanity-check the range | VAL ≤ POC (orange dot) ≤ VAH; the band covers roughly the densest ~70% of the profile bars | ☐ |
+| Y4 | Click **`VA: On`** → **`VA: Off`** | The band + VAH/VAL lines **disappear**; the VP bars + POC dot remain | ☐ |
+| Y5 | With VA off, click **`VP: On`** → **`VP: Off`** | The bars + POC dot disappear; the chart shows no profile at all (both off = overlay cleared) | ☐ |
+| Y6 | Turn **`VA: Off`** → **`VA: On`** (VP still off) | The **band + VAH/VAL lines reappear with NO bars and NO POC dot** (the two toggles are independent) | ☐ |
+| Y7 | Turn **`VP: Off`** → **`VP: On`** | Bars + POC dot come back alongside the value area | ☐ |
+| Y8 | Open the **Legend** (bottom-right) | Two new rows: **Value Area** (light slate `fill` swatch) and **VAH / VAL** (grey `line` swatch) — 10 entries total | ☐ |
+
+> Mechanism: pure `chart/valueArea.ts` (`calculateValueArea`, `VALUE_AREA_PCT=0.70`) expands
+> outward from the POC adding the larger-volume neighbor until ≥70% of volume, guaranteeing
+> VAL ≤ POC ≤ VAH. `VolumeProfileOverlay` gains independent `barsVisible` / `valueAreaVisible`
+> flags: `render()` draws band → bars → VAH/VAL lines → POC, gating bars+POC on `barsVisible`
+> and the band+lines on `valueAreaVisible`. The renderer draws the overlay when EITHER toggle
+> is on and clears it only when BOTH are off. Colors: band `rgba(120,123,134,0.12)`, lines
+> `#787b86`. Protocol stays **v:1** — no server change.
+
+---
+
 ## 5. Shut down
 
 - `Ctrl-C` in the `run.sh` terminal stops uvicorn and the backtest task.
@@ -325,12 +356,16 @@ Confirm:
 
 When the slice-2 canvas checks (A–H) **and** the slice-3 interaction checks (I–T) **and**
 the slice-4 multi-pane checks (U1–U7) **and** the slice-5 order-flow checks (V1–V7) **and**
-the slice-8 imbalance checks (W1–W6) **and** the slice-9 legend checks (X1–X10) **and**
+the slice-8 imbalance checks (W1–W6) **and** the slice-9 legend checks (X1–X10) **and** the slice-10 value-area checks (Y1–Y8) **and**
 the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
 
 **Slice 9 (legend panel) sign-off:**
 - Verified by: user + assistant (paired)   Date: 2026-07-11   Browser / OS: Chrome / macOS
 - Legend checks: X1 ☑ X2 ☑ X3 ☑ X4 ☑ X5 ☑ X6 ☑ X7 ☑ X8 ☑ X9 ☑ X10 ☑
+
+**Slice 10 (value area VAH/VAL) sign-off:**
+- Verified by: ______   Date: __________   Browser / OS: __________
+- Value-area checks: Y1 ☐ Y2 ☐ Y3 ☐ Y4 ☐ Y5 ☐ Y6 ☐ Y7 ☐ Y8 ☐
 
 **Notes:** Pure-client DOM-based legend panel on the Footprint view — 6 entries (Buy/Sell
 Dominant fill, POC outline, Buy/Sell Imbalance strips, Stacked Run bracket) with matching

@@ -65,6 +65,10 @@ export class CanvasCandlestickRenderer implements Renderer {
   private volumeProfileToggleButton: HTMLButtonElement | null = null;
   private volumeProfileVisible = true;
 
+  // Standalone Value Area (VAH/VAL) toggle, independent of the VP-bars toggle.
+  private valueAreaToggleButton: HTMLButtonElement | null = null;
+  private valueAreaVisible = true;
+
   // Vertical split: price 60%, CVD 20%, volume 20% (volume bottom = time axis)
   private static readonly PANE_HEIGHT_FRACTIONS = [0.6, 0.2, 0.2];
 
@@ -199,6 +203,7 @@ export class CanvasCandlestickRenderer implements Renderer {
     // Create Volume Profile Overlay (shares horizontal transform for chart width).
     this.volumeProfileOverlay = new VolumeProfileOverlay(this.container, horizontalTransform);
     this.createVolumeProfileToggleButton();
+    this.createValueAreaToggleButton();
 
     // Initial render (blank)
     this.scheduleRedraw();
@@ -270,12 +275,48 @@ export class CanvasCandlestickRenderer implements Renderer {
 
     button.addEventListener('click', () => {
       this.volumeProfileVisible = !this.volumeProfileVisible;
+      this.volumeProfileOverlay.setBarsVisible(this.volumeProfileVisible);
       syncLabel();
       this.scheduleRedraw();
     });
 
     this.container.appendChild(button);
     this.volumeProfileToggleButton = button;
+  }
+
+  /**
+   * Create a standalone toggle for the Value Area (VAH/VAL) band + reference
+   * lines (ON by default), independent of the VP-bars toggle. Positioned below
+   * the view/legend toggles at top:112 in the left button stack.
+   */
+  private createValueAreaToggleButton(): void {
+    const button = document.createElement('button');
+    button.style.position = 'absolute';
+    button.style.top = '112px';
+    button.style.left = '8px';
+    button.style.zIndex = '10';
+    button.style.padding = '4px 8px';
+    button.style.font = '12px sans-serif';
+    button.style.cursor = 'pointer';
+    button.style.border = '1px solid #cccccc';
+    button.style.borderRadius = '4px';
+    button.style.background = '#ffffff';
+    button.style.color = '#333333';
+
+    const syncLabel = (): void => {
+      button.textContent = this.valueAreaVisible ? 'VA: On' : 'VA: Off';
+    };
+    syncLabel();
+
+    button.addEventListener('click', () => {
+      this.valueAreaVisible = !this.valueAreaVisible;
+      this.volumeProfileOverlay.setValueAreaVisible(this.valueAreaVisible);
+      syncLabel();
+      this.scheduleRedraw();
+    });
+
+    this.container.appendChild(button);
+    this.valueAreaToggleButton = button;
   }
 
   public update(data: unknown): void {
@@ -415,6 +456,12 @@ export class CanvasCandlestickRenderer implements Renderer {
       this.volumeProfileToggleButton.parentNode.removeChild(this.volumeProfileToggleButton);
     }
     this.volumeProfileToggleButton = null;
+
+    // Remove the value area toggle button
+    if (this.valueAreaToggleButton && this.valueAreaToggleButton.parentNode) {
+      this.valueAreaToggleButton.parentNode.removeChild(this.valueAreaToggleButton);
+    }
+    this.valueAreaToggleButton = null;
 
     // Destroy Volume Profile overlay
     this.volumeProfileOverlay.destroy();
@@ -566,8 +613,10 @@ export class CanvasCandlestickRenderer implements Renderer {
     // Delegate all pane drawing (candles + volume histogram) to the layout.
     this.paneLayout.render(this.ctx, this.currentVisibleRange);
 
-    // Render Volume Profile overlay (if visible) on top of the panes.
-    if (this.volumeProfileVisible) {
+    // Render Volume Profile overlay when EITHER the bars or the value area is
+    // on; the overlay's own flags decide which elements draw. Clear only when
+    // BOTH are off (the overlay owns its canvas layer).
+    if (this.volumeProfileVisible || this.valueAreaVisible) {
       const priceRange = this.candlestickPane.getPriceRange();
       if (priceRange) {
         // Configure the shared transform for the overlay's price→Y mapping.
@@ -579,7 +628,7 @@ export class CanvasCandlestickRenderer implements Renderer {
       }
     } else {
       // Overlay draws to its own canvas layer; skipping render() alone leaves
-      // stale bars on screen. Clear the layer so the toggle actually hides it.
+      // stale content on screen. Clear the layer so both toggles off hides it.
       this.volumeProfileOverlay.clear();
     }
   }

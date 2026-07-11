@@ -1,5 +1,6 @@
 import type { CoordinateTransform, BarRange } from './CoordinateTransform';
 import type { BarPayload, FootprintPayload } from '../types';
+import { calculateValueArea, type ValueAreaLevel } from './valueArea';
 
 interface VolumeProfileLevel {
   price: number;
@@ -28,6 +29,10 @@ export class VolumeProfileOverlay {
   // Cached aggregation result for efficient crosshair lookup
   private cachedLevels: Map<number, { buy: number; sell: number; total: number }> | null = null;
 
+  // Independent visibility flags: VP-bars toggle vs Value-Area toggle.
+  private barsVisible = true;
+  private valueAreaVisible = true;
+
   private static readonly COLOR_BUY = '#26a69a';
   private static readonly COLOR_SELL = '#ef5350';
   private static readonly COLOR_POC = '#ff9800';
@@ -36,6 +41,8 @@ export class VolumeProfileOverlay {
   // Match VolumePane.BAR_ALPHA so the profile bars are semi-transparent and don't
   // occlude the price-axis labels they overlap on the right margin.
   private static readonly BAR_ALPHA = 0.72;
+  private static readonly COLOR_VALUE_AREA_BG = 'rgba(120, 123, 134, 0.12)';
+  private static readonly COLOR_VA_LINE = '#787b86';
 
   constructor(container: HTMLElement, transform: CoordinateTransform) {
     this.transform = transform;
@@ -105,6 +112,18 @@ export class VolumeProfileOverlay {
     this.ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
   }
 
+  public setBarsVisible(visible: boolean): void {
+    this.barsVisible = visible;
+  }
+
+  public setValueAreaVisible(visible: boolean): void {
+    this.valueAreaVisible = visible;
+  }
+
+  public isValueAreaVisible(): boolean {
+    return this.valueAreaVisible;
+  }
+
   public render(bars: BarPayload[], visibleBarRange: BarRange): void {
     this.ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
 
@@ -115,33 +134,68 @@ export class VolumeProfileOverlay {
     const marginsRight = this.canvasWidth - chartRightEdge;
     const maxBarLength = marginsRight * VolumeProfileOverlay.MAX_BAR_WIDTH_RATIO;
 
-    for (const level of result.levels) {
-      const y = this.transform.priceToY(level.price);
+    // Value area (only computed/drawn when its toggle is on).
+    const va = this.valueAreaVisible
+      ? calculateValueArea(
+          result.levels.map((l): ValueAreaLevel => ({ price: l.price, total: l.total })),
+          result.pocPrice,
+        )
+      : null;
 
-      const totalWidth = (level.total / result.maxTotal) * maxBarLength;
-      const barHeight = VolumeProfileOverlay.BAR_HEIGHT_PX;
-
-      this.ctx.globalAlpha = VolumeProfileOverlay.BAR_ALPHA;
-      if (level.buy > 0) {
-        const buyWidth = (level.buy / level.total) * totalWidth;
-        this.ctx.fillStyle = VolumeProfileOverlay.COLOR_BUY;
-        this.ctx.fillRect(chartRightEdge - buyWidth, y - barHeight / 2, buyWidth, barHeight);
-      }
-
-      if (level.sell > 0) {
-        const sellWidth = (level.sell / level.total) * totalWidth;
-        this.ctx.fillStyle = VolumeProfileOverlay.COLOR_SELL;
-        this.ctx.fillRect(chartRightEdge, y - barHeight / 2, sellWidth, barHeight);
-      }
-
-      if (level.price === result.pocPrice) {
-        this.ctx.globalAlpha = 1;
-        this.ctx.fillStyle = VolumeProfileOverlay.COLOR_POC;
-        this.ctx.beginPath();
-        this.ctx.arc(chartRightEdge, y, 3, 0, Math.PI * 2);
-        this.ctx.fill();
-      }
+    // (a) Value-area band, drawn behind everything.
+    if (va) {
+      const yTop = this.transform.priceToY(va.vah);
+      const yBot = this.transform.priceToY(va.val);
+      this.ctx.fillStyle = VolumeProfileOverlay.COLOR_VALUE_AREA_BG;
+      this.ctx.fillRect(0, yTop, chartRightEdge, yBot - yTop);
     }
+
+    // (b) Buy/sell bars, only when the VP-bars toggle is on.
+    if (this.barsVisible) {
+      this.ctx.globalAlpha = VolumeProfileOverlay.BAR_ALPHA;
+      for (const level of result.levels) {
+        const y = this.transform.priceToY(level.price);
+        const totalWidth = (level.total / result.maxTotal) * maxBarLength;
+        const barHeight = VolumeProfileOverlay.BAR_HEIGHT_PX;
+        if (level.buy > 0) {
+          const buyWidth = (level.buy / level.total) * totalWidth;
+          this.ctx.fillStyle = VolumeProfileOverlay.COLOR_BUY;
+          this.ctx.fillRect(chartRightEdge - buyWidth, y - barHeight / 2, buyWidth, barHeight);
+        }
+        if (level.sell > 0) {
+          const sellWidth = (level.sell / level.total) * totalWidth;
+          this.ctx.fillStyle = VolumeProfileOverlay.COLOR_SELL;
+          this.ctx.fillRect(chartRightEdge, y - barHeight / 2, sellWidth, barHeight);
+        }
+      }
+      this.ctx.globalAlpha = 1;
+    }
+
+    // (c) VAH/VAL dashed reference lines across the chart.
+    if (va) {
+      this.ctx.strokeStyle = VolumeProfileOverlay.COLOR_VA_LINE;
+      this.ctx.lineWidth = 1;
+      this.ctx.setLineDash([4, 3]);
+      for (const price of [va.vah, va.val]) {
+        const y = this.transform.priceToY(price);
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, y);
+        this.ctx.lineTo(chartRightEdge, y);
+        this.ctx.stroke();
+      }
+      this.ctx.setLineDash([]);
+    }
+
+    // (d) POC dot last, on top, only when the VP-bars toggle is on.
+    if (this.barsVisible && result.pocPrice !== null) {
+      const y = this.transform.priceToY(result.pocPrice);
+      this.ctx.globalAlpha = 1;
+      this.ctx.fillStyle = VolumeProfileOverlay.COLOR_POC;
+      this.ctx.beginPath();
+      this.ctx.arc(chartRightEdge, y, 3, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+
     this.ctx.globalAlpha = 1;
   }
 
