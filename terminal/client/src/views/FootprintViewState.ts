@@ -51,9 +51,39 @@ export class FootprintViewState {
     return this.visibleStart + this.visibleCount >= this.totalBars;
   }
 
+  /** Set the zoom level (visible bar count), clamped; re-clamps visibleStart. */
+  public setVisibleCount(count: number): void {
+    this.visibleCount = this.clampVisibleCount(count);
+    this.visibleStart = this.clampVisibleStart(this.visibleStart);
+  }
+
   public goToLatest(): void {
     this.visibleStart = Math.max(0, this.totalBars - this.visibleCount);
     this.followLatest = true;
+  }
+
+  public getRightEdgeBarIndex(): number {
+    if (this.totalBars === 0) {
+      return -1;
+    }
+    return Math.min(this.visibleStart + this.visibleCount - 1, this.totalBars - 1);
+  }
+
+  public setRightEdgeBarIndex(index: number): void {
+    if (this.totalBars === 0) {
+      return;
+    }
+    const clampedIndex = Math.max(0, Math.min(Math.round(index), this.totalBars - 1));
+    this.visibleStart = this.clampVisibleStart(clampedIndex - this.visibleCount + 1);
+    this.followLatest = this.isAtLatest();
+  }
+
+  public getFollowLatest(): boolean {
+    return this.followLatest;
+  }
+
+  public setFollowLatest(follow: boolean): void {
+    this.followLatest = follow;
   }
 
   private clampVisibleCount(count: number): number {

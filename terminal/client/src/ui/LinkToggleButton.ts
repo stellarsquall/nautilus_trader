@@ -1,28 +1,22 @@
-export type ViewType = 'overview' | 'footprint';
-
-export interface ViewToggleButtonCallbacks {
-  onViewSwitch: (viewType: ViewType) => void;
+export interface LinkToggleButtonConfig {
+  onToggle: (linked: boolean) => void;
 }
 
-export class ViewToggleButton {
+export class LinkToggleButton {
   private button: HTMLButtonElement;
-  private currentView: ViewType;
-  private callbacks: ViewToggleButtonCallbacks;
+  private linked: boolean;
+  private config: LinkToggleButtonConfig;
   private boundHandleClick: () => void;
 
-  constructor(
-    container: HTMLElement,
-    callbacks: ViewToggleButtonCallbacks,
-    initialView: ViewType = 'overview'
-  ) {
-    this.currentView = initialView;
-    this.callbacks = callbacks;
+  constructor(container: HTMLElement, config: LinkToggleButtonConfig) {
+    this.linked = true;
+    this.config = config;
 
     this.button = document.createElement('button');
     this.button.textContent = this.getLabel();
 
     this.button.style.position = 'absolute';
-    this.button.style.top = '58px';
+    this.button.style.top = '162px';
     this.button.style.left = '64px';
     this.button.style.zIndex = '10';
     this.button.style.padding = '4px 8px';
@@ -39,22 +33,21 @@ export class ViewToggleButton {
     container.appendChild(this.button);
   }
 
-  private getLabel(): string {
-    return this.currentView === 'overview' ? 'Overview' : 'Footprint';
+  getLabel(): string {
+    return this.linked ? 'Link: On' : 'Link: Off';
   }
 
-  /** Reposition the toggle (view-aware: Footprint moves it clear of the left price axis). */
   setPosition(top: string, left: string): void {
     this.button.style.top = top;
     this.button.style.left = left;
   }
 
-  public setViewType(viewType: ViewType): void {
-    this.currentView = viewType;
+  setLinked(linked: boolean): void {
+    this.linked = linked;
     this.button.textContent = this.getLabel();
   }
 
-  public destroy(): void {
+  destroy(): void {
     this.button.removeEventListener('click', this.boundHandleClick);
     if (this.button.parentNode) {
       this.button.parentNode.removeChild(this.button);
@@ -62,7 +55,8 @@ export class ViewToggleButton {
   }
 
   private handleClick(): void {
-    const newView: ViewType = this.currentView === 'overview' ? 'footprint' : 'overview';
-    this.callbacks.onViewSwitch(newView);
+    this.linked = !this.linked;
+    this.button.textContent = this.getLabel();
+    this.config.onToggle(this.linked);
   }
 }

@@ -357,6 +357,7 @@ view-toggle, legend, **`VA: On`** (at `top:112`).
 When the slice-2 canvas checks (A–H) **and** the slice-3 interaction checks (I–T) **and**
 the slice-4 multi-pane checks (U1–U7) **and** the slice-5 order-flow checks (V1–V7) **and**
 the slice-8 imbalance checks (W1–W6) **and** the slice-9 legend checks (X1–X10) **and** the slice-10 value-area checks (Y1–Y8) **and**
+the slice-11 linked-viewport checks (Z1–Z12) **and**
 the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
 
 **Slice 9 (legend panel) sign-off:**
@@ -366,6 +367,57 @@ the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
 **Slice 10 (value area VAH/VAL) sign-off:**
 - Verified by: user + assistant (paired)   Date: 2026-07-11   Browser / OS: Chrome / macOS
 - Value-area checks: Y1 ☑ Y2 ☑ Y3 ☑ Y4 ☑ Y5 ☑ Y6 ☑ Y7 ☑ Y8 ☑
+
+**Slice 11 (linked viewport persistence) sign-off:**
+- Verified by: user + assistant (paired)   Date: 2026-07-12   Browser / OS: Chrome / macOS
+- Linked-viewport checks: Z1 ☑ Z2 ☑ Z3 ☑ Z4 ☑ Z5 ☑ Z6 ☑ Z7 ☑ Z8 ☑ Z9 ☑ Z10 ☑ Z11 ☑ Z12 ☑
+
+---
+
+## 3g. Slice 11 — Linked Viewport Persistence Verification
+
+This slice adds persistent, time-linked viewport state to the NautilusTrader terminal.
+When switching between Overview and Footprint views, the viewport remains anchored at the same
+point in time (the right-edge bar's `ts_event`). A **"Link Views"** toggle (default ON) allows
+users to switch to independent mode where each view remembers its own scroll position.
+All behavior is **pure client** under `terminal/client/`.
+
+| # | Action | Expected | Pass? |
+|---|--------|----------|-------|
+| Z1 | Load the chart (Overview, default) | The chart auto-follows the latest bar (newest bar at right edge) | ☐ |
+| Z2 | Pan to a **historical** position, then click the **Footprint** view-toggle | Footprint opens at the **same point in time** as Overview's right-edge bar (linked mode) | ☐ |
+| Z3 | Pan Footprint to a different time, then switch back to **Overview** | **Linked mode:** Overview opens at **Footprint's** time — the shared anchor follows whichever view you just left (both views track the same moment) | ☐ |
+| Z4 | Find the **Link: On** toggle top-left (Overview: `top:138px left:8px`, Footprint: `top:110px left:64px`) | Button reads **"Link: On"** (default) | ☐ |
+| Z5 | Click **"Link: On"** → **"Link: Off"** | Toggle flips; subsequent view switches now restore **each view's own** remembered state (independent mode) | ☐ |
+| Z6 | In independent mode, pan Overview, switch to Footprint, pan Footprint to a different position, switch back | Each view remembers its **own** last position (not shared) | ☐ |
+| Z7 | With no prior state (first load, never switched), click **Footprint** | Footprint opens at **latest** (default followLatest=true) | ☐ |
+| Z8 | Pan so far that the anchor bar has rolled off the buffer, then switch views | No crash — viewport clamps to nearest valid position (oldest or latest) | ☐ |
+| Z9 | Set **followLatest=true** via state restoration with any anchor | View positions at the **latest** bar regardless of the provided anchor | ☐ |
+| Z12 | Toggle **Color/VP/VA** (Overview) and **Imbalance/Legend**, switch views, switch back | Each view's **toggle states persist** — Overview restores Color/VP/VA/Legend, Footprint restores Imbalance/Legend (per-view, never linked) | ☐ |
+| Z11 | **Zoom in** on Overview (wheel), switch to Footprint, switch back to Overview | Overview restores its **zoom level** too (visible bar count is remembered per-view, not reset to default) | ☐ |
+| Z10 | Re-run the slice-3/4/5/8/9/10 checks (I–T, U1–U7, V1–V7, W1–W6, X1–X10, Y1–Y8) | All prior interactions and views still pass unchanged | ☐ |
+
+> Mechanism: `ChartView` interface exports `ViewportState` (`anchorTsEvent: number|null`,
+> `followLatest: boolean`). Each view (`OverviewView` via `CanvasCandlestickRenderer`,
+> `FootprintView`) implements `getViewportState()` and `restoreViewportState(state)` using
+> binary search on the bars array to translate between `ts_event` and bar index.
+> `ViewManager` orchestrates the capture/restore with a `linkViews` flag (default `true`):
+> in linked mode, the outgoing view's state goes to `sharedAnchor` and the incoming view
+> restores from it; in independent mode, each view persists/restores its own state.
+> `LinkToggleButton` provides the On/Off toggle at view-specific positions.
+> Protocol stays **v:1** — no server change; core engine and server untouched.
+
+**Isolation gates (must both output `0`):**
+
+```bash
+git diff terminal..HEAD -- crates/ nautilus_trader/ | wc -l   # core engine untouched
+git diff terminal..HEAD -- terminal/server/ | wc -l           # server untouched (pure client)
+```
+
+**Automated gates** (inside `terminal/client/`): `npx tsc --noEmit` exits 0;
+`npx vitest run` exits 0 with total passing **> 752**; `npm run build` exits 0.
+
+---
 
 **Notes:** Pure-client DOM-based legend panel on the Footprint view — 6 entries (Buy/Sell
 Dominant fill, POC outline, Buy/Sell Imbalance strips, Stacked Run bracket) with matching

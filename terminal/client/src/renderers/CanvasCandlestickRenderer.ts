@@ -1,5 +1,6 @@
 import type { Renderer } from './Renderer';
 import type { BarPayload, CvdPayload, FootprintPayload } from '../types';
+import type { ViewportState } from '../views/ChartView';
 import { formatPrice, type BarRange } from '../chart/CoordinateTransform';
 import { ChartViewState } from '../chart/ChartViewState';
 import { InteractionController } from '../chart/InteractionController';
@@ -217,8 +218,8 @@ export class CanvasCandlestickRenderer implements Renderer {
   private createDeltaToggleButton(): void {
     const button = document.createElement('button');
     button.style.position = 'absolute';
-    button.style.top = '8px';
-    button.style.left = '8px';
+    button.style.top = '32px';
+    button.style.left = '64px';
     button.style.zIndex = '10';
     button.style.padding = '4px 8px';
     button.style.font = '12px sans-serif';
@@ -257,8 +258,8 @@ export class CanvasCandlestickRenderer implements Renderer {
   private createVolumeProfileToggleButton(): void {
     const button = document.createElement('button');
     button.style.position = 'absolute';
-    button.style.top = '34px';
-    button.style.left = '8px';
+    button.style.top = '84px';
+    button.style.left = '64px';
     button.style.zIndex = '10';
     button.style.padding = '4px 8px';
     button.style.font = '12px sans-serif';
@@ -292,8 +293,8 @@ export class CanvasCandlestickRenderer implements Renderer {
   private createValueAreaToggleButton(): void {
     const button = document.createElement('button');
     button.style.position = 'absolute';
-    button.style.top = '112px';
-    button.style.left = '8px';
+    button.style.top = '110px';
+    button.style.left = '64px';
     button.style.zIndex = '10';
     button.style.padding = '4px 8px';
     button.style.font = '12px sans-serif';
@@ -317,6 +318,46 @@ export class CanvasCandlestickRenderer implements Renderer {
 
     this.container.appendChild(button);
     this.valueAreaToggleButton = button;
+  }
+
+  // --- Toggle state accessors (used to persist Overview UI state across view switches) ---
+
+  public getColorByDelta(): boolean {
+    return this.candlestickPane.isColorByDelta();
+  }
+
+  public setColorByDelta(enabled: boolean): void {
+    this.candlestickPane.setColorByDelta(enabled);
+    if (this.deltaToggleButton) {
+      this.deltaToggleButton.textContent = enabled ? 'Color: Delta' : 'Color: Price';
+    }
+    this.scheduleRedraw();
+  }
+
+  public isVolumeProfileVisible(): boolean {
+    return this.volumeProfileVisible;
+  }
+
+  public setVolumeProfileVisible(visible: boolean): void {
+    this.volumeProfileVisible = visible;
+    this.volumeProfileOverlay.setBarsVisible(visible);
+    if (this.volumeProfileToggleButton) {
+      this.volumeProfileToggleButton.textContent = visible ? 'VP: On' : 'VP: Off';
+    }
+    this.scheduleRedraw();
+  }
+
+  public isValueAreaVisible(): boolean {
+    return this.valueAreaVisible;
+  }
+
+  public setValueAreaVisible(visible: boolean): void {
+    this.valueAreaVisible = visible;
+    this.volumeProfileOverlay.setValueAreaVisible(visible);
+    if (this.valueAreaToggleButton) {
+      this.valueAreaToggleButton.textContent = visible ? 'VA: On' : 'VA: Off';
+    }
+    this.scheduleRedraw();
   }
 
   public update(data: unknown): void {
@@ -531,6 +572,71 @@ export class CanvasCandlestickRenderer implements Renderer {
 
     // Keep the shared horizontal transform current for interaction hit-testing.
     this.paneLayout.getHorizontalTransform().setVisibleBarRange(this.currentVisibleRange);
+  }
+
+  public getViewportState(): ViewportState {
+    if (this.bars.length === 0) {
+      return { anchorTsEvent: null, followLatest: true };
+    }
+    const s = this.viewState.getState();
+    // Anchor on the right-edge VISIBLE bar (not the latest buffer bar), so a
+    // scrolled-back position is captured faithfully. Mirrors FootprintView.
+    const rightEdgeIndex = s.followLatest
+      ? this.bars.length - 1
+      : Math.max(0, Math.min(this.bars.length - 1, s.visibleStart + s.visibleCount - 1));
+    const rightEdgeBar = this.bars[rightEdgeIndex];
+    return { anchorTsEvent: rightEdgeBar.ts_event, followLatest: s.followLatest, visibleCount: s.visibleCount };
+  }
+
+  public restoreViewportState(state: ViewportState): void {
+    if (this.bars.length === 0) return;
+
+    // Restore zoom first (per-view), then position within that zoom.
+    if (state.visibleCount !== undefined) {
+      this.viewState.setVisibleCount(state.visibleCount);
+    }
+
+    if (state.followLatest) {
+      this.viewState.resetToLatest();
+    } else if (state.anchorTsEvent !== null) {
+      const index = this.findNearestBarIndex(state.anchorTsEvent);
+      const visibleCount = this.viewState.getState().visibleCount;
+      const targetVisibleStart = Math.max(0, index - visibleCount + 1);
+      const currentState = this.viewState.getState();
+      const delta = targetVisibleStart - currentState.visibleStart;
+      this.viewState.pan(delta);
+    }
+
+    this.updateVisibleRange();
+    this.scheduleRedraw();
+  }
+
+  private findNearestBarIndex(tsEvent: number): number {
+    if (this.bars.length === 0) return 0;
+
+    let low = 0;
+    let high = this.bars.length - 1;
+
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if (this.bars[mid].ts_event < tsEvent) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+
+    if (this.bars[low].ts_event === tsEvent) {
+      return low;
+    }
+
+    if (low > 0) {
+      const prevDist = Math.abs(this.bars[low - 1].ts_event - tsEvent);
+      const currDist = Math.abs(this.bars[low].ts_event - tsEvent);
+      return prevDist <= currDist ? low - 1 : low;
+    }
+
+    return low;
   }
 
   private resizeCanvas(newWidth: number, newHeight: number): void {

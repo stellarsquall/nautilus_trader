@@ -154,6 +154,67 @@ export class ChartViewState {
   }
 
   /**
+   * Get the index of the right-edge visible bar.
+   *
+   * Returns visibleStart + visibleCount - 1 (the last bar currently shown).
+   */
+  public getRightEdgeBarIndex(): number {
+    return this.visibleStart + this.visibleCount - 1;
+  }
+
+  /**
+   * Position the viewport so the given bar index sits at the right edge.
+   *
+   * The requested index is clamped to [0, max(0, totalBars - 1)] before being
+   * applied, so out-of-range values are safely bounded.
+   *
+   * Panning to the tail re-enables auto-follow; panning away from it pauses it.
+   *
+   * @param index - Bar index to place at the right edge
+   */
+  public setRightEdgeBarIndex(index: number): void {
+    const maxIndex = Math.max(0, this.totalBars - 1);
+    const clampedIndex = Math.max(0, Math.min(maxIndex, Math.round(index)));
+
+    const wasAtTail = this.isAtTail();
+    const maxStart = Math.max(0, this.totalBars - this.visibleCount);
+    this.visibleStart = this.clampVisibleStart(clampedIndex - this.visibleCount + 1);
+
+    const nowAtTail = this.isAtTail();
+
+    if (wasAtTail && !nowAtTail) {
+      this.followLatest = false;
+    } else if (!wasAtTail && nowAtTail) {
+      this.followLatest = true;
+    }
+  }
+
+  /**
+   * Get the current auto-follow (followLatest) flag.
+   */
+  /**
+   * Set the zoom level (visible bar count), clamped to [MIN, MAX].
+   * Re-clamps visibleStart so the window stays valid.
+   */
+  public setVisibleCount(count: number): void {
+    this.visibleCount = this.clampVisibleCount(count);
+    this.visibleStart = this.clampVisibleStart(this.visibleStart);
+  }
+
+  public getFollowLatest(): boolean {
+    return this.followLatest;
+  }
+
+  /**
+   * Set the auto-follow (followLatest) flag.
+   *
+   * @param follow - New followLatest value
+   */
+  public setFollowLatest(follow: boolean): void {
+    this.followLatest = follow;
+  }
+
+  /**
    * Clamp visibleCount to [MIN_VISIBLE_BARS, effectiveMax].
    *
    * effectiveMax caps zoom-out at the amount of data that actually exists: you

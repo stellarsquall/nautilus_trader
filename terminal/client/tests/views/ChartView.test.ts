@@ -87,6 +87,9 @@ describe('ChartView supports both adapter pattern and custom implementations (AC
       public updateFootprint = vi.fn();
       public destroy = vi.fn();
       public getType = vi.fn(() => ViewType.Overview);
+      public getLegendEntries = vi.fn(() => []);
+      public getViewportState = vi.fn(() => ({ anchorTsEvent: null, followLatest: true }));
+      public restoreViewportState = vi.fn();
     }
 
     const view: ChartView = new OverviewView();
@@ -108,6 +111,9 @@ describe('ChartView supports both adapter pattern and custom implementations (AC
       public updateFootprint = vi.fn();
       public destroy = vi.fn();
       public getType = vi.fn(() => ViewType.Footprint);
+      public getLegendEntries = vi.fn(() => []);
+      public getViewportState = vi.fn(() => ({ anchorTsEvent: null, followLatest: true }));
+      public restoreViewportState = vi.fn();
     }
 
     const view: ChartView = new FootprintView();
@@ -127,6 +133,9 @@ describe('Method signatures align with renderer patterns (AC4)', () => {
       updateFootprint: vi.fn(),
       destroy: vi.fn(),
       getType: () => ViewType.Overview,
+      getLegendEntries: () => [],
+      getViewportState: () => ({ anchorTsEvent: null, followLatest: true }),
+      restoreViewportState: () => {},
     };
     expect(typeof mock.updateBar).toBe('function');
     expect(mock.updateBar.length).toBe(1);
@@ -141,6 +150,9 @@ describe('Method signatures align with renderer patterns (AC4)', () => {
       updateFootprint: vi.fn(),
       destroy: vi.fn(),
       getType: () => ViewType.Overview,
+      getLegendEntries: () => [],
+      getViewportState: () => ({ anchorTsEvent: null, followLatest: true }),
+      restoreViewportState: () => {},
     };
     expect(typeof mock.updateCvd).toBe('function');
     expect(mock.updateCvd.length).toBe(1);
@@ -155,6 +167,9 @@ describe('Method signatures align with renderer patterns (AC4)', () => {
       updateFootprint: (_data: FootprintPayload) => {},
       destroy: vi.fn(),
       getType: () => ViewType.Overview,
+      getLegendEntries: () => [],
+      getViewportState: () => ({ anchorTsEvent: null, followLatest: true }),
+      restoreViewportState: () => {},
     };
     expect(typeof mock.updateFootprint).toBe('function');
     expect(mock.updateFootprint.length).toBe(1);
@@ -170,5 +185,7 @@ function createMockChartView(): ChartView {
     updateFootprint: vi.fn(),
     destroy: vi.fn(),
     getType: vi.fn(() => ViewType.Overview),
+    getViewportState: vi.fn(() => ({ anchorTsEvent: null, followLatest: true })),
+    restoreViewportState: vi.fn(),
   };
 }

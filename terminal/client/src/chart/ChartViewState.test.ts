@@ -421,6 +421,136 @@ describe('ChartViewState', () => {
     });
   });
 
+  describe('getRightEdgeBarIndex()', () => {
+    it('should return correct index after construction', () => {
+      const viewState = new ChartViewState(200, 100);
+      // visibleStart=100, visibleCount=100 → right edge = 199
+      expect(viewState.getRightEdgeBarIndex()).toBe(199);
+    });
+
+    it('should return correct index after pan', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.pan(-50);
+      // visibleStart=50, visibleCount=100 → right edge = 149
+      expect(viewState.getRightEdgeBarIndex()).toBe(149);
+    });
+
+    it('should return visibleCount - 1 when buffer is empty (totalBars=0)', () => {
+      const viewState = new ChartViewState(0);
+      // visibleStart=0, visibleCount=DEFAULT_VISIBLE_BARS → right edge = 99
+      expect(viewState.getRightEdgeBarIndex()).toBe(DEFAULT_VISIBLE_BARS - 1);
+    });
+
+    it('should return visibleCount - 1 when totalBars < visibleCount', () => {
+      const viewState = new ChartViewState(10, 100);
+      expect(viewState.getRightEdgeBarIndex()).toBe(19);
+    });
+  });
+
+  describe('setRightEdgeBarIndex()', () => {
+    it('should position viewport so index is at right edge', () => {
+      const viewState = new ChartViewState(500, 100);
+      // Place bar 150 at right edge → visibleStart = 150 - 100 + 1 = 51
+      viewState.setRightEdgeBarIndex(150);
+      expect(viewState.getState().visibleStart).toBe(51);
+      expect(viewState.getRightEdgeBarIndex()).toBe(150);
+    });
+
+    it('should clamp when index is too large (past totalBars)', () => {
+      const viewState = new ChartViewState(200, 100);
+      // totalBars=200, max right edge is 199
+      viewState.setRightEdgeBarIndex(300);
+      // Clamped to max(0, 200-100) = 100
+      expect(viewState.getState().visibleStart).toBe(100);
+      expect(viewState.getRightEdgeBarIndex()).toBe(199);
+    });
+
+    it('should clamp when index is too small (negative)', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.setRightEdgeBarIndex(-50);
+      // visibleStart clamped to 0
+      expect(viewState.getState().visibleStart).toBe(0);
+      expect(viewState.getRightEdgeBarIndex()).toBe(99);
+    });
+
+    it('should handle empty buffer (totalBars=0)', () => {
+      const viewState = new ChartViewState(0);
+      viewState.setRightEdgeBarIndex(50);
+      // visibleStart stays 0 (clamped)
+      expect(viewState.getState().visibleStart).toBe(0);
+    });
+
+    it('should handle index at exact boundary (totalBars - 1)', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.setRightEdgeBarIndex(199);
+      // right edge = 199 → visibleStart = 100
+      expect(viewState.getState().visibleStart).toBe(100);
+      expect(viewState.getRightEdgeBarIndex()).toBe(199);
+    });
+
+    it('should handle index equal to visibleCount - 1 (leftmost valid)', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.setRightEdgeBarIndex(99);
+      // visibleStart = 0
+      expect(viewState.getState().visibleStart).toBe(0);
+      expect(viewState.getRightEdgeBarIndex()).toBe(99);
+    });
+
+    it('should clamp fractional index by rounding', () => {
+      const viewState = new ChartViewState(500, 100);
+      viewState.setRightEdgeBarIndex(150.7);
+      // rounds to 151 → visibleStart = 52
+      expect(viewState.getState().visibleStart).toBe(52);
+      expect(viewState.getRightEdgeBarIndex()).toBe(151);
+    });
+  });
+
+  describe('getFollowLatest()', () => {
+    it('should return true by default', () => {
+      const viewState = new ChartViewState(200, 100);
+      expect(viewState.getFollowLatest()).toBe(true);
+    });
+
+    it('should return false after panning away from tail', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.pan(-10);
+      expect(viewState.getFollowLatest()).toBe(false);
+    });
+
+    it('should return true after panning back to tail', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.pan(-30);
+      expect(viewState.getFollowLatest()).toBe(false);
+      viewState.pan(30);
+      expect(viewState.getFollowLatest()).toBe(true);
+    });
+  });
+
+  describe('setFollowLatest()', () => {
+    it('should set followLatest to true', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.pan(-10);
+      expect(viewState.getFollowLatest()).toBe(false);
+      viewState.setFollowLatest(true);
+      expect(viewState.getFollowLatest()).toBe(true);
+    });
+
+    it('should set followLatest to false', () => {
+      const viewState = new ChartViewState(200, 100);
+      expect(viewState.getFollowLatest()).toBe(true);
+      viewState.setFollowLatest(false);
+      expect(viewState.getFollowLatest()).toBe(false);
+    });
+
+    it('should not affect visibleStart', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.pan(-50);
+      const startBefore = viewState.getState().visibleStart;
+      viewState.setFollowLatest(false);
+      expect(viewState.getState().visibleStart).toBe(startBefore);
+    });
+  });
+
   describe('isAtTail()', () => {
     it('should return true when visibleStart + visibleCount >= totalBars', () => {
       const viewState = new ChartViewState(200, 100);
@@ -447,6 +577,105 @@ describe('ChartViewState', () => {
       // 100 + 100 = 200, so at tail
 
       expect(viewState.isAtTail()).toBe(true);
+    });
+  });
+
+  describe('getRightEdgeBarIndex()', () => {
+    it('should return visibleStart + visibleCount - 1 after construction', () => {
+      const viewState = new ChartViewState(200, 100);
+      // visibleStart=100, visibleCount=100
+      expect(viewState.getRightEdgeBarIndex()).toBe(199);
+    });
+
+    it('should return correct value after pan', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.pan(-50); // visibleStart=50
+      expect(viewState.getRightEdgeBarIndex()).toBe(149); // 50 + 100 - 1
+    });
+
+    it('should return 0 for empty buffer', () => {
+      const viewState = new ChartViewState(0, 100);
+      // visibleStart=0, visibleCount=100
+      expect(viewState.getRightEdgeBarIndex()).toBe(99);
+    });
+  });
+
+  describe('setRightEdgeBarIndex()', () => {
+    it('should position viewport so given index is at right edge', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.setRightEdgeBarIndex(150);
+      // visibleStart = 150 - 100 + 1 = 51
+      expect(viewState.getState().visibleStart).toBe(51);
+      expect(viewState.getRightEdgeBarIndex()).toBe(150);
+    });
+
+    it('should clamp index > totalBars-1', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.setRightEdgeBarIndex(500); // Beyond buffer
+      // Clamped to totalBars-1=199 → visibleStart=100
+      expect(viewState.getRightEdgeBarIndex()).toBe(199);
+      expect(viewState.getState().visibleStart).toBe(100);
+    });
+
+    it('should clamp index < 0', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.pan(-50); // visibleStart=50
+      viewState.setRightEdgeBarIndex(-20); // Clamped to 0
+      expect(viewState.getState().visibleStart).toBe(0);
+      expect(viewState.getRightEdgeBarIndex()).toBe(99);
+    });
+
+    it('should set followLatest=false when moved away from tail', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.setRightEdgeBarIndex(100); // visibleStart=1, not at tail
+      expect(viewState.getState().followLatest).toBe(false);
+      expect(viewState.isAtTail()).toBe(false);
+    });
+
+    it('should set followLatest=true when positioned at tail', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.pan(-50);
+      expect(viewState.getState().followLatest).toBe(false);
+      viewState.setRightEdgeBarIndex(199); // At tail
+      expect(viewState.getState().followLatest).toBe(true);
+      expect(viewState.isAtTail()).toBe(true);
+    });
+
+    it('should handle empty buffer', () => {
+      const viewState = new ChartViewState(0, 100);
+      viewState.setRightEdgeBarIndex(50); // Clamped to totalBars-1=0
+      expect(viewState.getState().visibleStart).toBe(0);
+      expect(viewState.getRightEdgeBarIndex()).toBe(99);
+    });
+  });
+
+  describe('getFollowLatest()', () => {
+    it('should return true by default after construction', () => {
+      const viewState = new ChartViewState(200, 100);
+      expect(viewState.getFollowLatest()).toBe(true);
+    });
+
+    it('should reflect value set via setFollowLatest', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.setFollowLatest(false);
+      expect(viewState.getFollowLatest()).toBe(false);
+    });
+  });
+
+  describe('setFollowLatest()', () => {
+    it('should set the followLatest flag to false', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.setFollowLatest(false);
+      expect(viewState.getState().followLatest).toBe(false);
+      expect(viewState.getFollowLatest()).toBe(false);
+    });
+
+    it('should set the followLatest flag to true', () => {
+      const viewState = new ChartViewState(200, 100);
+      viewState.setFollowLatest(false);
+      viewState.setFollowLatest(true);
+      expect(viewState.getState().followLatest).toBe(true);
+      expect(viewState.getFollowLatest()).toBe(true);
     });
   });
 

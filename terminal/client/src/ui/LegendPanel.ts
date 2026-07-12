@@ -136,6 +136,16 @@ export class LegendPanel {
     this.toggleButton.textContent = this.visible ? 'Legend: ON' : 'Legend: OFF';
   }
 
+  public isVisible(): boolean {
+    return this.visible;
+  }
+
+  public setVisible(visible: boolean): void {
+    this.visible = visible;
+    this.panel.style.display = visible ? 'block' : 'none';
+    this.toggleButton.textContent = visible ? 'Legend: ON' : 'Legend: OFF';
+  }
+
   public destroy(): void {
     if (this.toggleButton.parentNode) {
       this.toggleButton.parentNode.removeChild(this.toggleButton);

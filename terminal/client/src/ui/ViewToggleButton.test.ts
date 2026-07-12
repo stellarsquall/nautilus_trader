@@ -30,8 +30,8 @@ describe('ViewToggleButton', () => {
     const button = container.querySelector('button');
     expect(button).not.toBeNull();
     expect(button?.style.position).toBe('absolute');
-    expect(button?.style.top).toBe('60px');
-    expect(button?.style.left).toBe('8px');
+    expect(button?.style.top).toBe('58px');
+    expect(button?.style.left).toBe('64px');
     expect(button?.style.zIndex).toBe('10');
     expect(button?.style.padding).toBe('4px 8px');
     expect(button?.style.fontSize).toBe('12px');
@@ -128,8 +128,8 @@ describe('ViewToggleButton', () => {
   it('setPosition() updates the toggle top/left (view-aware placement)', () => {
     toggleButton = new ViewToggleButton(container, callbacks);
     const button = container.querySelector('button') as HTMLButtonElement;
-    expect(button.style.top).toBe('60px');
-    expect(button.style.left).toBe('8px');
+    expect(button.style.top).toBe('58px');
+    expect(button.style.left).toBe('64px');
 
     toggleButton.setPosition('58px', '64px');
     expect(button.style.top).toBe('58px');

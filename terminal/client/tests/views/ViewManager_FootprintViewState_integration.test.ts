@@ -44,6 +44,8 @@ function createFootprintView(totalBars: number): FootprintViewWithState {
     updateFootprint: vi.fn(),
     destroy: vi.fn(() => {}),
     getType: vi.fn(() => ViewType.Footprint),
+    getViewportState: vi.fn(() => ({ anchorTsEvent: null, followLatest: true })),
+    restoreViewportState: vi.fn(),
   };
 }
 
@@ -56,6 +58,8 @@ function createOverviewView(): ChartView {
     updateFootprint: vi.fn(),
     destroy: vi.fn(),
     getType: vi.fn(() => ViewType.Overview),
+    getViewportState: vi.fn(() => ({ anchorTsEvent: null, followLatest: true })),
+    restoreViewportState: vi.fn(),
   };
 }
 

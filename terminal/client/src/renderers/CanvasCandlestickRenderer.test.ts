@@ -21,6 +21,7 @@ vi.mock('../chart/ChartViewState', () => {
       pan: vi.fn(),
       zoom: vi.fn(),
       resetToLatest: vi.fn(),
+      setVisibleCount: vi.fn(),
       isAtTail: vi.fn().mockReturnValue(true),
     })),
   };
@@ -842,14 +843,14 @@ describe('CanvasCandlestickRenderer', () => {
   });
 
   describe('Value Area toggle (slice 10)', () => {
-    it('renders a standalone VA toggle at top:112 left:8, default VA: On', () => {
+    it('renders a standalone VA toggle at top:110 left:64, default VA: On', () => {
       const renderer = new CanvasCandlestickRenderer(container);
       const vaButton = Array.from(container.querySelectorAll('button'))
         .find(b => b.textContent?.startsWith('VA:')) as HTMLButtonElement;
       expect(vaButton).toBeTruthy();
       expect(vaButton.textContent).toBe('VA: On');
-      expect(vaButton.style.top).toBe('112px');
-      expect(vaButton.style.left).toBe('8px');
+      expect(vaButton.style.top).toBe('110px');
+      expect(vaButton.style.left).toBe('64px');
       renderer.destroy();
     });
 
@@ -1129,6 +1130,9 @@ describe('CanvasCandlestickRenderer', () => {
         getVolumeAtPrice: vi.fn(() => null),
         updateDimensions: vi.fn(),
         render: vi.fn(),
+        setBarsVisible: vi.fn(),
+        setValueAreaVisible: vi.fn(),
+        isValueAreaVisible: vi.fn().mockReturnValue(true),
         destroy: vi.fn(),
       }));
 
@@ -1157,6 +1161,206 @@ describe('CanvasCandlestickRenderer', () => {
       const result = capturedResolver!(100);
       expect(result).toBe('100.50');
 
+      renderer.destroy();
+    });
+  });
+
+  describe('getViewportState / restoreViewportState (viewport delegation)', () => {
+    const makeBar = (ts: number): BarPayload => ({
+      ts_event: ts, open: 100, high: 102, low: 99, close: 101, volume: 500,
+    });
+
+    beforeEach(() => {
+      // Reset ChartViewState mock to default so subsequent tests get clean state
+      (ChartViewState as any).mockImplementation(() => ({
+        getState: vi.fn().mockReturnValue({
+          visibleStart: 0,
+          visibleCount: 100,
+          followLatest: true,
+        }),
+        setTotalBars: vi.fn(),
+        onNewBar: vi.fn(),
+        pan: vi.fn(),
+        zoom: vi.fn(),
+        resetToLatest: vi.fn(),
+        isAtTail: vi.fn().mockReturnValue(true),
+      }));
+    });
+
+    it('getViewportState returns anchorTsEvent from right-edge bar', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      renderer.update(makeBar(1000));
+      renderer.update(makeBar(2000));
+      renderer.update(makeBar(3000));
+
+      const state = renderer.getViewportState();
+      expect(state.anchorTsEvent).toBe(3000);
+      expect(state.followLatest).toBe(true);
+
+      renderer.destroy();
+    });
+
+    it('getViewportState returns null anchorTsEvent when no bars', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      const state = renderer.getViewportState();
+      expect(state.anchorTsEvent).toBeNull();
+      expect(state.followLatest).toBe(true);
+      renderer.destroy();
+    });
+
+    it('restoreViewportState with followLatest=true positions at latest bar', () => {
+      const mockResetToLatest = vi.fn();
+      const mockGetState = vi.fn().mockReturnValue({
+        visibleStart: 0, visibleCount: 100, followLatest: true,
+      });
+
+      (ChartViewState as any).mockImplementation(() => ({
+        getState: mockGetState,
+        resetToLatest: mockResetToLatest,
+        onNewBar: vi.fn(),
+        setTotalBars: vi.fn(),
+        pan: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+      renderer.update(makeBar(1000));
+      renderer.update(makeBar(2000));
+
+      renderer.restoreViewportState({ anchorTsEvent: null, followLatest: true });
+      expect(mockResetToLatest).toHaveBeenCalled();
+
+      renderer.destroy();
+    });
+
+    it('restoreViewportState with exact anchorTsEvent match positions viewport', () => {
+      let capturedPanDelta: number | undefined;
+      let capturedGetStateCallCount = 0;
+
+      const mockPan = vi.fn((delta: number) => { capturedPanDelta = delta; });
+      const mockGetState = vi.fn(() => {
+        capturedGetStateCallCount++;
+        return { visibleStart: 0, visibleCount: 100, followLatest: true };
+      });
+
+      (ChartViewState as any).mockImplementation(() => ({
+        getState: mockGetState,
+        pan: mockPan,
+        onNewBar: vi.fn(),
+        setTotalBars: vi.fn(),
+        resetToLatest: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+      // Add 5 bars with timestamps 1000, 2000, 3000, 4000, 5000
+      for (let i = 1; i <= 5; i++) {
+        renderer.update(makeBar(i * 1000));
+      }
+
+      // Restore to bar at ts_event=3000 (index 2) with followLatest=false
+      renderer.restoreViewportState({ anchorTsEvent: 3000, followLatest: false });
+
+      // With visibleCount=100 and index=2: targetVisibleStart = max(0, 2-100+1) = 0
+      // current visibleStart = 0, so delta = 0 - 0 = 0
+      expect(capturedPanDelta).toBe(0);
+
+      renderer.destroy();
+    });
+
+    it('binary search finds nearest bar when exact ts_event match not found', () => {
+      let capturedPanDelta: number | undefined;
+      const mockPan = vi.fn((delta: number) => { capturedPanDelta = delta; });
+      const mockGetState = vi.fn(() => {
+        return { visibleStart: 0, visibleCount: 100, followLatest: false };
+      });
+
+      (ChartViewState as any).mockImplementation(() => ({
+        getState: mockGetState,
+        pan: mockPan,
+        onNewBar: vi.fn(),
+        setTotalBars: vi.fn(),
+        resetToLatest: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+      // Bars at 1000, 2000, 4000, 5000 (no bar at 3000)
+      renderer.update(makeBar(1000));
+      renderer.update(makeBar(2000));
+      renderer.update(makeBar(4000));
+      renderer.update(makeBar(5000));
+
+      // Restore to ts_event=3000 which falls between 2000 (index 1) and 4000 (index 2)
+      // 4000-3000=1000, 3000-2000=1000, tie goes to lower index (1)
+      renderer.restoreViewportState({ anchorTsEvent: 3000, followLatest: false });
+
+      // targetVisibleStart = max(0, 1-100+1) = 0, current=0, delta = 0
+      expect(capturedPanDelta).toBe(0);
+
+      renderer.destroy();
+    });
+
+    it('binary search prefers closer bar from above when exact match not found', () => {
+      let capturedPanDelta: number | undefined;
+      const mockPan = vi.fn((delta: number) => { capturedPanDelta = delta; });
+      const mockGetState = vi.fn(() => {
+        return { visibleStart: 0, visibleCount: 100, followLatest: false };
+      });
+
+      (ChartViewState as any).mockImplementation(() => ({
+        getState: mockGetState,
+        pan: mockPan,
+        onNewBar: vi.fn(),
+        setTotalBars: vi.fn(),
+        resetToLatest: vi.fn(),
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+      // Bars at 1000, 5000, 10000
+      renderer.update(makeBar(1000));
+      renderer.update(makeBar(5000));
+      renderer.update(makeBar(10000));
+
+      // Restore to ts_event=5100, nearest is 5000 (diff 100 vs 10000 diff 4900)
+      // index of 5000 is 1
+      renderer.restoreViewportState({ anchorTsEvent: 5100, followLatest: false });
+
+      // targetVisibleStart = max(0, 1-100+1) = 0
+      expect(capturedPanDelta).toBe(0);
+
+      renderer.destroy();
+    });
+
+    it('restoreViewportState with followLatest=true ignores anchorTsEvent and goes to latest', () => {
+      const mockResetToLatest = vi.fn();
+      const mockPan = vi.fn();
+      const mockGetState = vi.fn().mockReturnValue({
+        visibleStart: 0, visibleCount: 100, followLatest: true,
+      });
+
+      (ChartViewState as any).mockImplementation(() => ({
+        getState: mockGetState,
+        pan: mockPan,
+        onNewBar: vi.fn(),
+        setTotalBars: vi.fn(),
+        resetToLatest: mockResetToLatest,
+      }));
+
+      const renderer = new CanvasCandlestickRenderer(container);
+      renderer.update(makeBar(1000));
+      renderer.update(makeBar(2000));
+
+      // Even with anchorTsEvent=1000, followLatest=true should override
+      renderer.restoreViewportState({ anchorTsEvent: 1000, followLatest: true });
+      expect(mockResetToLatest).toHaveBeenCalled();
+      expect(mockPan).not.toHaveBeenCalled();
+
+      renderer.destroy();
+    });
+
+    it('restoreViewportState with empty bars does not throw', () => {
+      const renderer = new CanvasCandlestickRenderer(container);
+      expect(() => {
+        renderer.restoreViewportState({ anchorTsEvent: null, followLatest: true });
+      }).not.toThrow();
       renderer.destroy();
     });
   });

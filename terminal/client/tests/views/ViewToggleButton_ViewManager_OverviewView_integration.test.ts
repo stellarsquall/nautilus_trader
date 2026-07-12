@@ -10,6 +10,14 @@ const mockRenderer = vi.hoisted(() => ({
   updateCvd: vi.fn(),
   updateFootprint: vi.fn(),
   destroy: vi.fn(),
+  getViewportState: vi.fn(() => ({ anchorTsEvent: null, followLatest: true })),
+  restoreViewportState: vi.fn(),
+  getColorByDelta: vi.fn(() => true),
+  setColorByDelta: vi.fn(),
+  isVolumeProfileVisible: vi.fn(() => true),
+  setVolumeProfileVisible: vi.fn(),
+  isValueAreaVisible: vi.fn(() => true),
+  setValueAreaVisible: vi.fn(),
 }));
 
 vi.mock('../../src/renderers/CanvasCandlestickRenderer', () => ({
@@ -43,6 +51,8 @@ function createFootprintMockFactory(): () => ChartView {
     updateFootprint: vi.fn(),
     destroy: vi.fn(),
     getType: vi.fn(() => ViewType.Footprint),
+    getViewportState: vi.fn(() => ({ anchorTsEvent: null, followLatest: true })),
+    restoreViewportState: vi.fn(),
   });
 }
 

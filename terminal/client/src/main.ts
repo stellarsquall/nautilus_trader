@@ -4,6 +4,8 @@ import { ViewType } from './views/ChartView.js';
 import { OverviewView } from './views/OverviewView.js';
 import { FootprintView } from './views/FootprintView.js';
 import { ViewToggleButton } from './ui/ViewToggleButton.js';
+import { LinkToggleButton } from './ui/LinkToggleButton.js';
+import { repositionControls } from './ui/reposition.js';
 import type { Envelope, BarPayload, CvdPayload, FootprintPayload } from './types.js';
 
 const container = document.getElementById('chart-container');
@@ -18,18 +20,18 @@ const viewManager = new ViewManager(chartStore, container, (type) => {
   return new FootprintView();
 });
 
+const linkToggle = new LinkToggleButton(container, {
+  onToggle: (linked) => {
+    viewManager.setLinkViews(linked);
+  },
+});
+
 const toggle = new ViewToggleButton(container, {
   onViewSwitch: (viewType) => {
     const chartViewType = viewType === 'overview' ? ViewType.Overview : ViewType.Footprint;
     viewManager.switchToView(chartViewType);
     toggle.setViewType(viewType);
-    // Footprint has a left price-axis gutter + top time header; move the view toggle
-    // into the footprint safe zone (right of axis, below header). Overview keeps top-left.
-    if (viewType === 'footprint') {
-      toggle.setPosition('58px', '64px');
-    } else {
-      toggle.setPosition('60px', '8px');
-    }
+    repositionControls(toggle, linkToggle, viewType);
   },
 });
 

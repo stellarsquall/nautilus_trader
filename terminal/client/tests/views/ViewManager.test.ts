@@ -14,6 +14,8 @@ function createMockView(type: ViewType): ChartView {
     updateFootprint: vi.fn(),
     destroy: vi.fn(),
     getType: vi.fn(() => type),
+    getViewportState: vi.fn(() => ({ anchorTsEvent: null, followLatest: true })),
+    restoreViewportState: vi.fn(),
   };
 }
 
@@ -94,6 +96,8 @@ describe('ViewManager', () => {
         updateFootprint: vi.fn(),
         destroy: destroySpy,
         getType: vi.fn(() => ViewType.Footprint),
+        getViewportState: vi.fn(() => ({ anchorTsEvent: null, followLatest: true })),
+        restoreViewportState: vi.fn(),
       };
       (vm as unknown as { currentView: ChartView | null }).currentView = mockView;
 

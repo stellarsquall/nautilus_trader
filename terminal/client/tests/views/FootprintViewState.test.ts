@@ -193,6 +193,128 @@ describe('FootprintViewState', () => {
     });
   });
 
+  describe('getRightEdgeBarIndex() (AC7)', () => {
+    it('should return visibleStart + visibleCount - 1 after construction', () => {
+      const viewState = new FootprintViewState(200, 100);
+
+      // visibleStart = 100, visibleCount = 100 => right edge index = 199
+      expect(viewState.getRightEdgeBarIndex()).toBe(199);
+    });
+
+    it('should return updated right edge after panning', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.pan(-50); // visibleStart = 50
+
+      expect(viewState.getRightEdgeBarIndex()).toBe(149); // 50 + 100 - 1
+    });
+
+    it('should return -1 for empty buffer', () => {
+      const viewState = new FootprintViewState(0);
+
+      expect(viewState.getRightEdgeBarIndex()).toBe(-1);
+    });
+
+    it('should reflect right edge after setRightEdgeBarIndex', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.setRightEdgeBarIndex(120);
+
+      expect(viewState.getRightEdgeBarIndex()).toBe(120);
+    });
+  });
+
+  describe('setRightEdgeBarIndex() (AC8)', () => {
+    it('should position viewport so given bar is at right edge', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.setRightEdgeBarIndex(120); // visibleStart = 120 - 100 + 1 = 21
+
+      const range = viewState.getVisibleBarRange();
+      expect(range.startIndex).toBe(21);
+      expect(viewState.getRightEdgeBarIndex()).toBe(120);
+    });
+
+    it('should clamp at left edge when index is too small', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.setRightEdgeBarIndex(10); // would give visibleStart = -89
+
+      const range = viewState.getVisibleBarRange();
+      expect(range.startIndex).toBe(0); // clamped
+    });
+
+    it('should clamp at right edge when index is too large', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.setRightEdgeBarIndex(500); // would give visibleStart = 401
+
+      const range = viewState.getVisibleBarRange();
+      expect(range.startIndex).toBe(100); // clamped to max(0, 200 - 100)
+      expect(viewState.getRightEdgeBarIndex()).toBe(199);
+    });
+
+    it('should round fractional index', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.setRightEdgeBarIndex(120.6); // rounds to 121 => visibleStart = 22
+
+      expect(viewState.getRightEdgeBarIndex()).toBe(121);
+    });
+
+    it('should enable followLatest when at latest', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.pan(-50);
+      expect(viewState.getFollowLatest()).toBe(false);
+
+      viewState.setRightEdgeBarIndex(199); // back to tail
+
+      expect(viewState.getFollowLatest()).toBe(true);
+    });
+
+    it('should disable followLatest when not at latest', () => {
+      const viewState = new FootprintViewState(200, 100);
+
+      viewState.setRightEdgeBarIndex(120); // not at tail
+
+      expect(viewState.getFollowLatest()).toBe(false);
+    });
+
+    it('should handle empty buffer', () => {
+      const viewState = new FootprintViewState(0);
+      viewState.setRightEdgeBarIndex(5);
+
+      expect(viewState.getVisibleBarRange().startIndex).toBe(0);
+    });
+  });
+
+  describe('getFollowLatest() and setFollowLatest() (AC9)', () => {
+    it('should return true after construction by default', () => {
+      const viewState = new FootprintViewState(200, 100);
+
+      expect(viewState.getFollowLatest()).toBe(true);
+    });
+
+    it('should round-trip setFollowLatest(false)', () => {
+      const viewState = new FootprintViewState(200, 100);
+
+      viewState.setFollowLatest(false);
+      expect(viewState.getFollowLatest()).toBe(false);
+    });
+
+    it('should round-trip setFollowLatest(true) after disabling', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.setFollowLatest(false);
+      viewState.setFollowLatest(true);
+
+      expect(viewState.getFollowLatest()).toBe(true);
+    });
+
+    it('should leave viewport unchanged when setting followLatest directly', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.pan(-30);
+
+      const before = viewState.getVisibleBarRange().startIndex;
+      viewState.setFollowLatest(false);
+
+      expect(viewState.getVisibleBarRange().startIndex).toBe(before);
+    });
+  });
+
   describe('Edge Cases (AC6)', () => {
     it('should handle empty bars (zero totalBars)', () => {
       const viewState = new FootprintViewState(0);
@@ -235,6 +357,121 @@ describe('FootprintViewState', () => {
 
       viewState.setTotalBars(0);
       expect(viewState.getVisibleBarRange().startIndex).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('getRightEdgeBarIndex() (AC7)', () => {
+    it('should return the index of the right-edge visible bar', () => {
+      const viewState = new FootprintViewState(200, 100);
+
+      expect(viewState.getRightEdgeBarIndex()).toBe(199); // 100 + 100 - 1 = 199
+    });
+
+    it('should return correct index after panning', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.pan(-50); // visibleStart = 50
+
+      expect(viewState.getRightEdgeBarIndex()).toBe(149); // 50 + 100 - 1 = 149
+    });
+
+    it('should return -1 when totalBars is 0', () => {
+      const viewState = new FootprintViewState(0);
+
+      expect(viewState.getRightEdgeBarIndex()).toBe(-1);
+    });
+
+    it('should clamp to totalBars - 1 when viewport extends past buffer', () => {
+      const viewState = new FootprintViewState(5, MIN_VISIBLE_BARS);
+
+      expect(viewState.getRightEdgeBarIndex()).toBe(4); // totalBars - 1
+    });
+  });
+
+  describe('setRightEdgeBarIndex() (AC8)', () => {
+    it('should position the viewport so the given index is at the right edge', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.setRightEdgeBarIndex(150);
+
+      const range = viewState.getVisibleBarRange();
+      expect(range.startIndex).toBe(51); // 150 - 100 + 1 = 51
+      expect(viewState.getRightEdgeBarIndex()).toBe(150);
+    });
+
+    it('should clamp index to valid bounds (upper)', () => {
+      const viewState = new FootprintViewState(200, 100);
+
+      viewState.setRightEdgeBarIndex(500);
+
+      const range = viewState.getVisibleBarRange();
+      expect(range.startIndex).toBe(100); // Clamped to 199 - 100 + 1 = 100
+    });
+
+    it('should clamp index to valid bounds (lower)', () => {
+      const viewState = new FootprintViewState(200, 100);
+
+      viewState.setRightEdgeBarIndex(-10);
+
+      const range = viewState.getVisibleBarRange();
+      expect(range.startIndex).toBe(0);
+    });
+
+    it('should do nothing when totalBars is 0', () => {
+      const viewState = new FootprintViewState(0);
+
+      viewState.setRightEdgeBarIndex(10);
+
+      expect(viewState.getRightEdgeBarIndex()).toBe(-1);
+    });
+
+    it('should update followLatest when setRightEdgeBarIndex reaches latest', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.pan(-50); // followLatest = false
+
+      viewState.setRightEdgeBarIndex(199);
+
+      expect(viewState.getFollowLatest()).toBe(true);
+    });
+
+    it('should update followLatest when setRightEdgeBarIndex moves away from latest', () => {
+      const viewState = new FootprintViewState(200, 100);
+      expect(viewState.getFollowLatest()).toBe(true);
+
+      viewState.setRightEdgeBarIndex(150);
+
+      expect(viewState.getFollowLatest()).toBe(false);
+    });
+
+    it('should handle small totalBars', () => {
+      const viewState = new FootprintViewState(3, MIN_VISIBLE_BARS);
+
+      viewState.setRightEdgeBarIndex(2);
+
+      expect(viewState.getRightEdgeBarIndex()).toBe(2);
+    });
+  });
+
+  describe('getFollowLatest() / setFollowLatest() (AC9)', () => {
+    it('should return true by default', () => {
+      const viewState = new FootprintViewState(200);
+
+      expect(viewState.getFollowLatest()).toBe(true);
+    });
+
+    it('should return false after panning away', () => {
+      const viewState = new FootprintViewState(200, 100);
+      viewState.pan(-10);
+
+      expect(viewState.getFollowLatest()).toBe(false);
+    });
+
+    it('should set followLatest flag', () => {
+      const viewState = new FootprintViewState(200, 100);
+
+      viewState.setFollowLatest(false);
+      expect(viewState.getFollowLatest()).toBe(false);
+
+      viewState.setFollowLatest(true);
+      expect(viewState.getFollowLatest()).toBe(true);
     });
   });
 });

@@ -1,5 +1,5 @@
 import type { ChartStoreState, FootprintPayload } from '../types.js';
-import { ChartView, ViewType } from './ChartView.js';
+import { ChartView, type ViewportState, ViewType } from './ChartView.js';
 import { CanvasCandlestickRenderer } from '../renderers/CanvasCandlestickRenderer.js';
 import { LegendPanel, type LegendEntry, type LegendPanelConfig } from '../ui/LegendPanel.js';
 
@@ -9,7 +9,13 @@ export class OverviewView implements ChartView {
 
   mount(container: HTMLElement): void {
     this.renderer = new CanvasCandlestickRenderer(container);
-    const config: LegendPanelConfig = { entries: this.getLegendEntries(), defaultVisible: false };
+    const config: LegendPanelConfig = {
+      entries: this.getLegendEntries(),
+      defaultVisible: false,
+      // Overview nav column: Legend sits below Color/View/VP/VA.
+      toggleTop: '136px',
+      toggleLeft: '64px',
+    };
     this._legendPanel = new LegendPanel(container, config);
   }
 
@@ -72,5 +78,36 @@ export class OverviewView implements ChartView {
       { label: 'POC', color: '#ff9800', kind: 'dot' },
       { label: 'Value Area (VAH/VAL)', color: '#787b86', kind: 'valueArea' },
     ];
+  }
+
+  getViewportState(): ViewportState {
+    if (!this.renderer) return { anchorTsEvent: null, followLatest: true };
+    return this.renderer.getViewportState();
+  }
+
+  restoreViewportState(state: ViewportState): void {
+    if (!this.renderer) return;
+    this.renderer.restoreViewportState(state);
+  }
+
+  getUiState(): unknown {
+    if (!this.renderer) return undefined;
+    return {
+      colorByDelta: this.renderer.getColorByDelta(),
+      vpVisible: this.renderer.isVolumeProfileVisible(),
+      vaVisible: this.renderer.isValueAreaVisible(),
+      legendVisible: this._legendPanel?.isVisible() ?? false,
+    };
+  }
+
+  restoreUiState(state: unknown): void {
+    if (!this.renderer || !state || typeof state !== 'object') return;
+    const s = state as {
+      colorByDelta?: boolean; vpVisible?: boolean; vaVisible?: boolean; legendVisible?: boolean;
+    };
+    if (typeof s.colorByDelta === 'boolean') this.renderer.setColorByDelta(s.colorByDelta);
+    if (typeof s.vpVisible === 'boolean') this.renderer.setVolumeProfileVisible(s.vpVisible);
+    if (typeof s.vaVisible === 'boolean') this.renderer.setValueAreaVisible(s.vaVisible);
+    if (typeof s.legendVisible === 'boolean') this._legendPanel?.setVisible(s.legendVisible);
   }
 }

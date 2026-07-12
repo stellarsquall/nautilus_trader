@@ -1,5 +1,5 @@
 import type { ChartStoreState, FootprintPayload, FootprintLevel, BarPayload } from '../types.js';
-import { ChartView, ViewType } from './ChartView.js';
+import { ChartView, type ViewportState, ViewType } from './ChartView.js';
 import { FootprintViewState, type BarRange } from './FootprintViewState.js';
 import { FootprintInteractionController } from './FootprintInteractionController.js';
 import { formatTime } from '../chart/CoordinateTransform.js';
@@ -228,6 +228,67 @@ export class FootprintView implements ChartView {
     ];
   }
 
+  getViewportState(): ViewportState {
+    const rightEdgeIndex = this._viewState.getRightEdgeBarIndex();
+    const anchorTsEvent = rightEdgeIndex >= 0 && rightEdgeIndex < this.bars.length
+      ? this.bars[rightEdgeIndex].ts_event
+      : null;
+    return {
+      anchorTsEvent,
+      followLatest: this._viewState.getFollowLatest(),
+      visibleCount: this._viewState.getVisibleBarRange().count,
+    };
+  }
+
+  restoreViewportState(state: ViewportState): void {
+    if (state.visibleCount !== undefined) {
+      this._viewState.setVisibleCount(state.visibleCount);
+    }
+    if (state.followLatest) {
+      this._viewState.goToLatest();
+    } else if (state.anchorTsEvent !== null && this.bars.length > 0) {
+      const targetIndex = this.binarySearchClosest(this.bars, state.anchorTsEvent);
+      this._viewState.setRightEdgeBarIndex(targetIndex);
+    }
+    this.draw();
+  }
+
+  getUiState(): unknown {
+    return {
+      imbalanceVisible: this.imbalanceMarkersVisible,
+      legendVisible: this._legendPanel?.isVisible() ?? false,
+    };
+  }
+
+  restoreUiState(state: unknown): void {
+    if (!state || typeof state !== 'object') return;
+    const s = state as { imbalanceVisible?: boolean; legendVisible?: boolean };
+    if (typeof s.imbalanceVisible === 'boolean') this.setImbalanceMarkersVisible(s.imbalanceVisible);
+    if (typeof s.legendVisible === 'boolean') this._legendPanel?.setVisible(s.legendVisible);
+  }
+
+  private binarySearchClosest(bars: BarPayload[], tsEvent: number): number {
+    let lo = 0;
+    let hi = bars.length - 1;
+
+    if (tsEvent <= bars[lo].ts_event) return lo;
+    if (tsEvent >= bars[hi].ts_event) return hi;
+
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const midVal = bars[mid].ts_event;
+      if (midVal === tsEvent) return mid;
+      if (midVal < tsEvent) {
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return lo < bars.length && (lo === 0 || Math.abs(bars[lo].ts_event - tsEvent) < Math.abs(bars[hi].ts_event - tsEvent))
+      ? lo
+      : hi;
+  }
+
   private mountLegendPanel(): void {
     if (!this.container) return;
     const config: LegendPanelConfig = {
@@ -347,6 +408,36 @@ export class FootprintView implements ChartView {
     const prices = Array.from(allPrices).sort((a, b) => b - a);
     const cellHeight = FootprintView.CELL_HEIGHT;
     const pocOutlineWidth = FootprintView.POC_OUTLINE_WIDTH;
+
+    // Fill the canvas height by CENTERING the price ladder: split the empty rows
+    // evenly above and below the data. This gives the top bar the same padding
+    // from the header as the bottom bar has from the bottom (instead of the top
+    // hugging the header). Extra rows carry no cells (empty grid).
+    let binSize = 0;
+    for (const b of visibleBars) {
+      const bfp = this.footprints.get(b.ts_event);
+      if (bfp && bfp.bin_size > 0) { binSize = bfp.bin_size; break; }
+    }
+    const HEADER_HEIGHT = 24;
+    const rowsToFill = Math.floor((height - HEADER_HEIGHT) / cellHeight);
+    if (binSize > 0 && prices.length > 0 && prices.length < rowsToFill) {
+      const slack = rowsToFill - prices.length;
+      const topPad = Math.floor(slack / 2);
+      // Top padding: empty rows ABOVE the highest price (descending order).
+      const highest = prices[0];
+      const topRows: number[] = [];
+      for (let i = topPad; i >= 1; i--) {
+        topRows.push(Number((highest + i * binSize).toFixed(6)));
+      }
+      prices.unshift(...topRows);
+      // Bottom fill: extend downward for the remaining rows.
+      let nextPrice = prices[prices.length - 1];
+      while (prices.length < rowsToFill) {
+        nextPrice = Number((nextPrice - binSize).toFixed(6));
+        if (nextPrice <= 0) break;
+        prices.push(nextPrice);
+      }
+    }
 
     // Price-to-row mapping for bracket drawing
     const priceToRow = new Map<number, number>();
