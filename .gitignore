@@ -199,3 +199,7 @@ tests/test_data/**/backtest/**
 !/nautilus_core/adapters/src/databento/test_data/*
 .artifacts/
 node_modules/
+
+# Local agentic-build scaffolding (slice/run/fire/build/fix scripts, logs, DAG
+# state, plan/execute artifacts) -- never part of the shipped product.
+/agentfield/
