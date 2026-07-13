@@ -117,8 +117,10 @@ export class InteractionController {
   private handleDragMove(event: MouseEvent): void {
     if (!this.isDragging) return;
 
+    const barWidth = this.safeBarWidth();
+    if (barWidth === null) return; // transform not ready; ignore this move
     const deltaX = event.clientX - this.dragStartX;
-    const deltaBars = -deltaX / this.transform.getBarWidth();
+    const deltaBars = -deltaX / barWidth;
 
     // Compute the target relative to the drag origin, then apply the residual
     // via the relative pan() (cumulative, drift-free).
@@ -126,6 +128,19 @@ export class InteractionController {
     const targetVisibleStart = this.dragStartVisibleStart + Math.round(deltaBars);
     this.viewState.pan(targetVisibleStart - currentVisibleStart);
     this.callbacks.onViewChanged();
+  }
+
+  /** Read getBarWidth() defensively: never let a null-range/non-finite width from
+   *  a mid-switch transform throw out of a handler or feed NaN into pan/zoom.
+   *  Returns null (=> caller should no-op) on any anomaly. */
+  private safeBarWidth(): number | null {
+    let bw: number;
+    try {
+      bw = this.transform.getBarWidth();
+    } catch {
+      return null;
+    }
+    return Number.isFinite(bw) && bw > 0 ? bw : null;
   }
 
   /** Window-level: end the drag on mouse release. */
@@ -161,7 +176,10 @@ export class InteractionController {
     // Two-finger horizontal swipe (no pinch): pan through time. Accumulate
     // sub-bar deltas so fine scrolling still pans instead of rounding to zero.
     if (!event.ctrlKey && Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
-      this.wheelPanAccumulator += event.deltaX / this.transform.getBarWidth();
+      const barWidth = this.safeBarWidth();
+      if (barWidth === null) return;
+      if (!Number.isFinite(this.wheelPanAccumulator)) this.wheelPanAccumulator = 0;
+      this.wheelPanAccumulator += event.deltaX / barWidth;
       const wholeBars = Math.trunc(this.wheelPanAccumulator);
       if (wholeBars !== 0) {
         this.wheelPanAccumulator -= wholeBars;
@@ -180,7 +198,13 @@ export class InteractionController {
       Math.min(InteractionController.MAX_WHEEL_DELTA, event.deltaY)
     );
     const zoomFactor = Math.exp(clampedDelta * InteractionController.ZOOM_SENSITIVITY);
-    const anchorBarIndex = this.transform.xToBarIndex(canvasX);
+    let anchorBarIndex: number;
+    try {
+      anchorBarIndex = this.transform.xToBarIndex(canvasX);
+    } catch {
+      return; // transform not ready; ignore this zoom
+    }
+    if (!Number.isFinite(anchorBarIndex)) return;
     this.viewState.zoom(zoomFactor, anchorBarIndex);
     this.callbacks.onViewChanged();
   }

@@ -24,6 +24,7 @@ export class FootprintView implements ChartView {
   private currentDPR = 1;
   private _imbalanceMarkersVisible = true;
   private _imbalanceToggleButton: HTMLButtonElement | null = null;
+  private _latestButton: HTMLButtonElement | null = null;
   private _legendPanel: LegendPanel | null = null;
 
   static readonly COLOR_POC = '#ff9800';
@@ -108,6 +109,7 @@ export class FootprintView implements ChartView {
     });
 
     this.createImbalanceToggleButton();
+    this.createLatestButton();
     this.mountLegendPanel();
   }
 
@@ -140,6 +142,45 @@ export class FootprintView implements ChartView {
     }
     this.container.appendChild(button);
     this._imbalanceToggleButton = button;
+  }
+
+  /** "Latest" button (top-right) mirroring the Overview's reset-to-latest. Shown
+   *  only when the view has drifted from live — i.e. it isn't following the newest
+   *  bar OR the price ladder isn't auto-centered. Clicking returns to both. */
+  private createLatestButton(): void {
+    if (!this.container) return;
+
+    const button = document.createElement('button');
+    button.textContent = 'Latest';
+    button.style.position = 'absolute';
+    button.style.top = '10px';
+    button.style.right = '10px';
+    button.style.zIndex = '10';
+    button.style.padding = '6px 12px';
+    button.style.fontSize = '12px';
+    button.style.background = '#ffffff';
+    button.style.border = '1px solid #333333';
+    button.style.cursor = 'pointer';
+    button.style.borderRadius = '3px';
+    button.style.display = 'none';
+
+    button.addEventListener('click', () => {
+      this._viewState.goToLatest();
+      this._viewState.resetVertical();
+      this.draw();
+    });
+
+    if (getComputedStyle(this.container).position === 'static') {
+      this.container.style.position = 'relative';
+    }
+    this.container.appendChild(button);
+    this._latestButton = button;
+  }
+
+  private updateLatestButtonVisibility(): void {
+    if (!this._latestButton) return;
+    const atLive = this._viewState.getFollowLatest() && this._viewState.getVerticalAutoCenter();
+    this._latestButton.style.display = atLive ? 'none' : 'block';
   }
 
   seed(state: ChartStoreState): void {
@@ -195,6 +236,12 @@ export class FootprintView implements ChartView {
       }
       this._imbalanceToggleButton = null;
     }
+    if (this._latestButton) {
+      if (this._latestButton.parentNode) {
+        this._latestButton.parentNode.removeChild(this._latestButton);
+      }
+      this._latestButton = null;
+    }
     if (this.interactionController) {
       this.interactionController.destroy();
       this.interactionController = null;
@@ -237,6 +284,8 @@ export class FootprintView implements ChartView {
       anchorTsEvent,
       followLatest: this._viewState.getFollowLatest(),
       visibleCount: this._viewState.getVisibleBarRange().count,
+      verticalOffset: this._viewState.getVerticalOffset(),
+      verticalAutoCenter: this._viewState.getVerticalAutoCenter(),
     };
   }
 
@@ -249,6 +298,14 @@ export class FootprintView implements ChartView {
     } else if (state.anchorTsEvent !== null && this.bars.length > 0) {
       const targetIndex = this.binarySearchClosest(this.bars, state.anchorTsEvent);
       this._viewState.setRightEdgeBarIndex(targetIndex);
+    }
+    // Vertical scroll (footprint-only; Overview leaves these undefined). Applied
+    // AFTER a draw pass has (or will) set content bounds; setVerticalOffset
+    // re-clamps against the last known bounds so an out-of-range value is safe.
+    if (state.verticalAutoCenter === false && typeof state.verticalOffset === 'number') {
+      this._viewState.setVerticalOffset(state.verticalOffset);
+    } else if (state.verticalAutoCenter === true) {
+      this._viewState.resetVertical();
     }
     this.draw();
   }
@@ -333,6 +390,8 @@ export class FootprintView implements ChartView {
   private draw(): void {
     if (!this.ctx || !this.canvas) return;
 
+    this.updateLatestButtonVisibility();
+
     const ctx = this.ctx;
     const dpr = this.currentDPR;
     const width = this.canvas.width / dpr;
@@ -342,9 +401,20 @@ export class FootprintView implements ChartView {
     ctx.clearRect(0, 0, width, height);
 
     const range = this._viewState.getVisibleBarRange();
-    const visibleBars = this.getVisibleBars(range);
+    let visibleBars = this.getVisibleBars(range);
 
     if (visibleBars.length === 0) return;
+
+    // The footprint uses FIXED-width columns (MIN_COLUMN_WIDTH), so only so many
+    // fit the canvas. If the window holds more bars than fit, render the RIGHTMOST
+    // (newest) ones -- otherwise the left-anchored grid would paint the oldest
+    // columns and push the latest bars off-screen to the right.
+    const maxColumns = Math.floor(
+      (width - FootprintView.PRICE_AXIS_WIDTH) / FootprintView.MIN_COLUMN_WIDTH,
+    );
+    if (maxColumns > 0 && visibleBars.length > maxColumns) {
+      visibleBars = visibleBars.slice(visibleBars.length - maxColumns);
+    }
 
     this.drawFootprintGrid(ctx, width, height, visibleBars);
   }
@@ -409,40 +479,56 @@ export class FootprintView implements ChartView {
     const cellHeight = FootprintView.CELL_HEIGHT;
     const pocOutlineWidth = FootprintView.POC_OUTLINE_WIDTH;
 
-    // Fill the canvas height by CENTERING the price ladder: split the empty rows
-    // evenly above and below the data. This gives the top bar the same padding
-    // from the header as the bottom bar has from the bottom (instead of the top
-    // hugging the header). Extra rows carry no cells (empty grid).
+    // Vertical layout (slice 12). The price ladder is a CONTINUOUS grid: every
+    // row across the whole canvas gets a gridline + price label (TradingView-
+    // style), whether or not a bar traded there, so you can scroll far into
+    // empty space. `binSize` is the price step; row r maps to price
+    // pHigh - r*binSize and to y = HEADER + r*cellHeight - effectiveOffset.
     let binSize = 0;
     for (const b of visibleBars) {
       const bfp = this.footprints.get(b.ts_event);
       if (bfp && bfp.bin_size > 0) { binSize = bfp.bin_size; break; }
     }
+    // Fallback when no bar carries a bin_size: smallest positive gap in the data.
+    if (binSize <= 0) {
+      for (let i = 1; i < prices.length; i++) {
+        const gap = prices[i - 1] - prices[i];
+        if (gap > 0 && (binSize <= 0 || gap < binSize)) binSize = gap;
+      }
+      if (binSize <= 0) binSize = 1;
+    }
+    const pHigh = prices[0];
+    const rowOfPrice = (p: number): number => Math.round((pHigh - p) / binSize);
+
     const HEADER_HEIGHT = 24;
-    const rowsToFill = Math.floor((height - HEADER_HEIGHT) / cellHeight);
-    if (binSize > 0 && prices.length > 0 && prices.length < rowsToFill) {
-      const slack = rowsToFill - prices.length;
-      const topPad = Math.floor(slack / 2);
-      // Top padding: empty rows ABOVE the highest price (descending order).
-      const highest = prices[0];
-      const topRows: number[] = [];
-      for (let i = topPad; i >= 1; i--) {
-        topRows.push(Number((highest + i * binSize).toFixed(6)));
-      }
-      prices.unshift(...topRows);
-      // Bottom fill: extend downward for the remaining rows.
-      let nextPrice = prices[prices.length - 1];
-      while (prices.length < rowsToFill) {
-        nextPrice = Number((nextPrice - binSize).toFixed(6));
-        if (nextPrice <= 0) break;
-        prices.push(nextPrice);
-      }
+    const viewportHeight = Math.max(0, height - HEADER_HEIGHT);
+    const autoCenter = this._viewState.getVerticalAutoCenter();
+
+    // Content bounds (the real traded ladder) drive the scroll clamp + centering.
+    const contentHeight = prices.length * cellHeight;
+    this._viewState.setVerticalContentBounds(contentHeight, viewportHeight);
+    // Effective vertical offset (px). Auto-center => the data block is centered
+    // in the viewport (offset kept in sync so the first manual pan doesn't jump).
+    // Manual => the clamped stored offset. Subtracted from every row/bracket y.
+    let effectiveOffset: number;
+    if (autoCenter) {
+      effectiveOffset = Math.round((contentHeight - viewportHeight) / 2);
+      this._viewState.syncVerticalOffset(effectiveOffset);
+    } else {
+      effectiveOffset = this._viewState.getVerticalOffset();
     }
 
-    // Price-to-row mapping for bracket drawing
+    // Absolute-row mapping for cells + bracket drawing: each traded price maps
+    // to its continuous-grid row index (pHigh - price)/binSize, so cells align
+    // with the continuous gridlines even when levels have gaps.
     const priceToRow = new Map<number, number>();
-    for (let r = 0; r < prices.length; r++) {
-      priceToRow.set(prices[r], r);
+    for (const p of prices) {
+      priceToRow.set(p, rowOfPrice(p));
+    }
+    // Data by absolute row: row -> per-column level (undefined where no trade).
+    const dataByRow = new Map<number, Array<{ price: number; buy: number; sell: number } | undefined>>();
+    for (const p of prices) {
+      dataByRow.set(rowOfPrice(p), barLevels.map((m) => m.get(p)));
     }
 
     // Pre-compute imbalance data per visible bar (at most once per bar per draw pass)
@@ -492,12 +578,33 @@ export class FootprintView implements ChartView {
       ctx.fillText(formatTime(visibleBars[c].ts_event), x, headerHeight / 2 + 1);
     }
 
-    for (let r = 0; r < prices.length; r++) {
-      const price = prices[r];
-      const y = headerHeight + r * cellHeight;
+    // Clip the scrollable grid region so rows scrolled up behind the header can
+    // never paint over it (the header background + column time labels stay fixed).
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, headerHeight, width, Math.max(0, height - headerHeight));
+    ctx.clip();
 
-      // Background for alternating rows
-      ctx.fillStyle = r % 2 === 0 ? '#ffffff' : FootprintView.COLOR_CELL_BG;
+    // Precompute POC price per visible bar (once, not per cell).
+    const pocByBar = new Map<number, number | null>();
+    for (const bar of visibleBars) {
+      pocByBar.set(bar.ts_event, this.calculatePOCForBar(bar.ts_event).pocPrice);
+    }
+
+    // Continuous grid: iterate ABSOLUTE rows across the whole viewport so the
+    // gridlines + price axis fill the canvas even where no bar traded (you can
+    // scroll far into empty space, TradingView-style).
+    const firstRow = Math.floor(effectiveOffset / cellHeight) - 1;
+    const lastRow = Math.ceil((effectiveOffset + viewportHeight) / cellHeight) + 1;
+    for (let r = firstRow; r <= lastRow; r++) {
+      const y = headerHeight + r * cellHeight - effectiveOffset;
+
+      // Cull rows fully outside the grid viewport (the clip also guards overdraw).
+      if (y + cellHeight <= headerHeight || y >= height) continue;
+
+      // Background for alternating rows (by ABSOLUTE row index so the banding is
+      // stable as you scroll). ((r % 2) + 2) % 2 keeps parity correct for r < 0.
+      ctx.fillStyle = ((r % 2) + 2) % 2 === 0 ? '#ffffff' : FootprintView.COLOR_CELL_BG;
       ctx.fillRect(0, y, width, cellHeight);
 
       // Horizontal grid line
@@ -508,34 +615,40 @@ export class FootprintView implements ChartView {
       ctx.lineTo(width, y + cellHeight);
       ctx.stroke();
 
-      // Price-axis gutter (left): neutral background + right-aligned price label
+      // Price-axis gutter (left): neutral background + right-aligned price label.
+      // The price is the continuous-grid price for this row (synthetic in the
+      // empty margins); skip labels for non-positive prices.
+      const price = pHigh - r * binSize;
       ctx.fillStyle = '#fafafa';
       ctx.fillRect(0, y, axisWidth, cellHeight);
-      ctx.fillStyle = '#666666';
-      ctx.textAlign = 'right';
-      ctx.font = '10px sans-serif';
-      ctx.fillText(price.toFixed(priceDecimals), axisWidth - 6, y + cellHeight / 2);
+      if (price > 0) {
+        ctx.fillStyle = '#666666';
+        ctx.textAlign = 'right';
+        ctx.font = '10px sans-serif';
+        ctx.fillText(price.toFixed(priceDecimals), axisWidth - 6, y + cellHeight / 2);
+      }
 
-      for (let c = 0; c < columnCount; c++) {
-        const level = barLevels[c].get(price);
+      // Column vertical separators (full grid, every row).
+      for (let c = 1; c < columnCount; c++) {
         const cellX = axisWidth + c * columnWidth;
+        ctx.strokeStyle = '#e8e8e8';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cellX, y);
+        ctx.lineTo(cellX, y + cellHeight);
+        ctx.stroke();
+      }
 
-        // Draw vertical separator
-        if (c > 0) {
-          ctx.strokeStyle = '#e8e8e8';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(cellX, y);
-          ctx.lineTo(cellX, y + cellHeight);
-          ctx.stroke();
-        }
-
+      // Cells: only rows where a bar actually traded carry content.
+      const rowCols = dataByRow.get(r);
+      if (!rowCols) continue;
+      for (let c = 0; c < columnCount; c++) {
+        const level = rowCols[c];
         if (!level) continue;
-
-        // Check if this level is POC for this bar
+        const cellX = axisWidth + c * columnWidth;
         const bar = visibleBars[c];
-        const pocResult = this.calculatePOCForBar(bar.ts_event);
-        const isPOC = pocResult.pocPrice !== null && Math.abs(level.price - pocResult.pocPrice) < 1e-10;
+        const pocPrice = pocByBar.get(bar.ts_event);
+        const isPOC = pocPrice !== undefined && pocPrice !== null && Math.abs(level.price - pocPrice) < 1e-10;
 
         // Draw delta-colored background
         const deltaBg = this.getDeltaBackground(level.buy, level.sell);
@@ -576,11 +689,7 @@ export class FootprintView implements ChartView {
 
         const volumeText = `${Math.round(level.sell)} | ${Math.round(level.buy)}`;
 
-        if (isPOC) {
-          ctx.fillStyle = FootprintView.COLOR_POC;
-        } else {
-          ctx.fillStyle = FootprintView.COLOR_TEXT;
-        }
+        ctx.fillStyle = isPOC ? FootprintView.COLOR_POC : FootprintView.COLOR_TEXT;
         ctx.fillText(volumeText, numX, y + cellHeight / 2);
       }
     }
@@ -598,7 +707,7 @@ export class FootprintView implements ChartView {
           if (fromRow === undefined || toRow === undefined) continue;
           const topRow = Math.min(fromRow, toRow);
           const bottomRow = Math.max(fromRow, toRow);
-          const runY = headerHeight + topRow * cellHeight;
+          const runY = headerHeight + topRow * cellHeight - effectiveOffset;
           const runHeight = (bottomRow - topRow + 1) * cellHeight;
           const color = run.side === 'buy' ? FootprintView.COLOR_BUY : FootprintView.COLOR_SELL;
           ctx.fillStyle = color;
@@ -610,6 +719,8 @@ export class FootprintView implements ChartView {
         }
       }
     }
+
+    ctx.restore();
 
     // Vertical divider between the price axis and the cell grid
     ctx.strokeStyle = '#d0d0d0';

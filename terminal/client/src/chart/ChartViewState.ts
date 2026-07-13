@@ -85,9 +85,17 @@ export class ChartViewState {
     const newVisibleCount = this.visibleCount * zoomFactor;
     this.visibleCount = this.clampVisibleCount(newVisibleCount);
 
-    // Recompute visibleStart to preserve anchor position
-    const newVisibleStart = anchorBarIndex - (anchorFraction * this.visibleCount);
-    this.visibleStart = this.clampVisibleStart(newVisibleStart);
+    if (this.followLatest) {
+      // While following the latest bar, stay pinned to the tail so visibleStart
+      // and followLatest never diverge. (Zooming keeps the newest bar in view,
+      // TradingView-style.) Divergence here previously stranded followLatest=true
+      // with an off-tail visibleStart, which froze horizontal pan.
+      this.visibleStart = this.clampVisibleStart(this.totalBars - this.visibleCount);
+    } else {
+      // Recompute visibleStart to preserve the cursor anchor position.
+      const newVisibleStart = anchorBarIndex - (anchorFraction * this.visibleCount);
+      this.visibleStart = this.clampVisibleStart(newVisibleStart);
+    }
   }
 
   /**
@@ -223,6 +231,8 @@ export class ChartViewState {
    * (startup), so no data cap is applied and the full [MIN, MAX] range is used.
    */
   private clampVisibleCount(count: number): number {
+    // Reject non-finite input (NaN/Infinity) so a bad zoom can't poison state.
+    if (!Number.isFinite(count)) count = DEFAULT_VISIBLE_BARS;
     const dataCap = this.totalBars > 0
       ? Math.max(MIN_VISIBLE_BARS, this.totalBars)
       : MAX_VISIBLE_BARS;
@@ -234,6 +244,12 @@ export class ChartViewState {
    * Clamp visibleStart to [0, max(0, totalBars - visibleCount)].
    */
   private clampVisibleStart(start: number): number {
+    // Reject non-finite input (NaN/Infinity from a bad pan/zoom) by keeping the
+    // current position, so the viewport can never freeze on a NaN visibleStart
+    // (which pan() and zoom() would otherwise propagate indefinitely).
+    if (!Number.isFinite(start)) {
+      return Number.isFinite(this.visibleStart) ? this.visibleStart : 0;
+    }
     const maxStart = Math.max(0, this.totalBars - this.visibleCount);
     return Math.max(0, Math.min(maxStart, Math.round(start)));
   }

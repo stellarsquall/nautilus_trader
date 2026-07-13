@@ -48,6 +48,8 @@ function createMockCtx(): CanvasRenderingContext2D {
     fillText: vi.fn(),
     strokeRect: vi.fn(),
     beginPath: vi.fn(),
+    rect: vi.fn(),
+    clip: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
     stroke: vi.fn(),

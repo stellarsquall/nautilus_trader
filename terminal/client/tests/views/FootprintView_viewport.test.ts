@@ -11,6 +11,8 @@ function createMockCtx(): CanvasRenderingContext2D {
     fillText: vi.fn(),
     strokeRect: vi.fn(),
     beginPath: vi.fn(),
+    rect: vi.fn(),
+    clip: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
     stroke: vi.fn(),
@@ -153,5 +155,87 @@ describe('FootprintView followLatest', () => {
     expect(view.viewState.isAtLatest()).toBe(true);
     const rightEdgeIndex = view.viewState.getRightEdgeBarIndex();
     expect(rightEdgeIndex).toBe(bars.length - 1);
+  });
+
+  it('captures verticalOffset + verticalAutoCenter in getViewportState', () => {
+    const view = new FootprintView();
+    view.mount(document.createElement('div'));
+    view.seed({ bars: createBars(50), cvd: new Map(), footprints: new Map() });
+
+    // Default: auto-centered, offset 0.
+    let vp = view.getViewportState();
+    expect(vp.verticalAutoCenter).toBe(true);
+    expect(vp.verticalOffset).toBe(0);
+
+    // After a manual pan, the state carries the offset + autoCenter=false.
+    view.viewState.setVerticalContentBounds(2000, 400);
+    view.viewState.panVertical(120);
+    vp = view.getViewportState();
+    expect(vp.verticalAutoCenter).toBe(false);
+    expect(vp.verticalOffset).toBe(120);
+  });
+
+  it('restores verticalOffset (clamped) and verticalAutoCenter', () => {
+    const view = new FootprintView();
+    view.mount(document.createElement('div'));
+    view.seed({ bars: createBars(50), cvd: new Map(), footprints: new Map() });
+    view.viewState.setVerticalContentBounds(2000, 400);
+
+    view.restoreViewportState({
+      anchorTsEvent: null, followLatest: true,
+      verticalOffset: 200, verticalAutoCenter: false,
+    });
+    expect(view.viewState.getVerticalAutoCenter()).toBe(false);
+    expect(view.viewState.getVerticalOffset()).toBe(200);
+
+    // An out-of-range offset on restore is clamped, never applied raw.
+    view.viewState.setVerticalContentBounds(2000, 400);
+    view.restoreViewportState({
+      anchorTsEvent: null, followLatest: true,
+      verticalOffset: 999999, verticalAutoCenter: false,
+    });
+    expect(view.viewState.getVerticalOffset()).toBeLessThan(999999);
+
+    // autoCenter=true restores centered mode regardless of offset.
+    view.restoreViewportState({
+      anchorTsEvent: null, followLatest: true, verticalAutoCenter: true,
+    });
+    expect(view.viewState.getVerticalAutoCenter()).toBe(true);
+    expect(view.viewState.getVerticalOffset()).toBe(0);
+  });
+});
+
+describe('FootprintView Latest button (slice 12)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('is hidden while live, shown after horizontal or vertical drift, and returns to live on click', () => {
+    const view = new FootprintView();
+    const container = document.createElement('div');
+    view.mount(container);
+    view.seed({ bars: createBars(200), cvd: new Map(), footprints: new Map() });
+
+    const latest = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Latest'
+    ) as HTMLButtonElement;
+    expect(latest).toBeDefined();
+    // Live (following latest + auto-centered) => hidden.
+    expect(latest.style.display).toBe('none');
+
+    // Pan back in time => shown.
+    view.viewState.pan(-40);
+    view.restoreViewportState(view.getViewportState());
+    expect(latest.style.display).toBe('block');
+
+    // Click returns to latest + auto-center and hides again.
+    latest.click();
+    expect(view.viewState.isAtLatest()).toBe(true);
+    expect(view.viewState.getVerticalAutoCenter()).toBe(true);
+    expect(latest.style.display).toBe('none');
+
+    // Vertical scroll alone also reveals it.
+    view.viewState.setVerticalContentBounds(2000, 400);
+    view.viewState.panVertical(120);
+    view.restoreViewportState(view.getViewportState());
+    expect(latest.style.display).toBe('block');
   });
 });

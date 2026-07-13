@@ -32,15 +32,17 @@ describe('FootprintInteractionController', () => {
   });
 
   describe('Constructor and Event Listener Attachment', () => {
-    it('should attach a mousedown listener to the canvas (drag move/up live on window)', () => {
+    it('should attach mousedown, wheel and dblclick listeners to the canvas (drag move/up live on window)', () => {
       const canvas2 = document.createElement('canvas');
       document.body.appendChild(canvas2);
       const addEventListenerSpy = vi.spyOn(canvas2, 'addEventListener');
 
       const c = new FootprintInteractionController(canvas2, viewState, callbacks);
 
-      expect(addEventListenerSpy).toHaveBeenCalledTimes(1);
+      expect(addEventListenerSpy).toHaveBeenCalledTimes(3);
       expect(addEventListenerSpy).toHaveBeenCalledWith('mousedown', expect.any(Function));
+      expect(addEventListenerSpy).toHaveBeenCalledWith('wheel', expect.any(Function), expect.anything());
+      expect(addEventListenerSpy).toHaveBeenCalledWith('dblclick', expect.any(Function));
 
       c.destroy();
       document.body.removeChild(canvas2);
@@ -167,6 +169,66 @@ describe('FootprintInteractionController', () => {
       vi.clearAllMocks();
       window.dispatchEvent(new MouseEvent('mousemove', { clientX: 300 }));
       expect(callbacks.onViewChanged).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Vertical scroll (slice 12)', () => {
+    beforeEach(() => {
+      // Give the ladder room to scroll so panVertical isn't clamped to 0.
+      viewState.setVerticalContentBounds(2000, 400);
+    });
+
+    it('wheel scrolls the ladder vertically (panVertical) and notifies', () => {
+      const evt = new WheelEvent('wheel', { deltaY: 40, cancelable: true });
+      canvas.dispatchEvent(evt);
+      expect(viewState.getVerticalOffset()).toBe(40);
+      expect(viewState.getVerticalAutoCenter()).toBe(false);
+      expect(callbacks.onViewChanged).toHaveBeenCalled();
+      expect(evt.defaultPrevented).toBe(true);
+    });
+
+    it('two-finger horizontal wheel (deltaX dominant) pans bars, not the ladder', () => {
+      const startBar = viewState.getVisibleBarRange().startIndex;
+      // Large negative deltaX (into history, since we start at latest), dominant over deltaY.
+      canvas.dispatchEvent(new WheelEvent('wheel', { deltaX: -500, deltaY: 5, cancelable: true }));
+      expect(viewState.getVisibleBarRange().startIndex).not.toBe(startBar); // horizontal moved
+      expect(viewState.getVerticalOffset()).toBe(0); // ladder untouched
+      expect(callbacks.onViewChanged).toHaveBeenCalled();
+    });
+
+    it('double-click resets to auto-center and notifies', () => {
+      viewState.panVertical(300);
+      expect(viewState.getVerticalAutoCenter()).toBe(false);
+      canvas.dispatchEvent(new MouseEvent('dblclick', { cancelable: true }));
+      expect(viewState.getVerticalOffset()).toBe(0);
+      expect(viewState.getVerticalAutoCenter()).toBe(true);
+      expect(callbacks.onViewChanged).toHaveBeenCalled();
+    });
+
+    it('vertical drag pans the ladder (dragging up scrolls it up)', () => {
+      canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: 400, clientY: 300 }));
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 400, clientY: 250 }));
+      // Dragging up (clientY 300 -> 250, deltaY -50) scrolls the ladder up: offset +50.
+      expect(viewState.getVerticalOffset()).toBe(50);
+      expect(viewState.getVerticalAutoCenter()).toBe(false);
+      window.dispatchEvent(new MouseEvent('mouseup', { clientX: 400, clientY: 250 }));
+    });
+
+    it('diagonal drag pans both axes at once', () => {
+      const startBar = viewState.getVisibleBarRange().startIndex;
+      canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: 400, clientY: 300 }));
+      // Drag right (into history, since we start at latest) + up.
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 520, clientY: 250 }));
+      expect(viewState.getVerticalOffset()).toBe(50); // vertical moved
+      expect(viewState.getVisibleBarRange().startIndex).not.toBe(startBar); // horizontal moved
+      window.dispatchEvent(new MouseEvent('mouseup', { clientX: 520, clientY: 250 }));
+    });
+
+    it('destroy() removes the wheel and dblclick listeners', () => {
+      const removeSpy = vi.spyOn(canvas, 'removeEventListener');
+      controller.destroy();
+      expect(removeSpy).toHaveBeenCalledWith('wheel', expect.any(Function));
+      expect(removeSpy).toHaveBeenCalledWith('dblclick', expect.any(Function));
     });
   });
 });

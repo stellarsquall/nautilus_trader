@@ -210,6 +210,7 @@ describe('ChartViewState', () => {
 
     it('should handle anchor at start of visible range', () => {
       const viewState = new ChartViewState(200, 100);
+      viewState.setFollowLatest(false); // anchor-preserving zoom applies when NOT following latest
       const anchorBarIndex = 100; // At start of visible range
 
       viewState.zoom(0.5, anchorBarIndex); // Zoom in to 50 bars
@@ -221,6 +222,7 @@ describe('ChartViewState', () => {
 
     it('should handle anchor at end of visible range', () => {
       const viewState = new ChartViewState(200, 100);
+      viewState.setFollowLatest(false); // anchor-preserving zoom applies when NOT following latest
       const anchorBarIndex = 199; // At end of visible range
 
       viewState.zoom(0.5, anchorBarIndex); // Zoom in to 50 bars
@@ -772,6 +774,71 @@ describe('ChartViewState', () => {
       expect(state.visibleStart).toBeLessThanOrEqual(Math.max(0, 500 - state.visibleCount));
       expect(state.visibleCount).toBeGreaterThanOrEqual(MIN_VISIBLE_BARS);
       expect(state.visibleCount).toBeLessThanOrEqual(MAX_VISIBLE_BARS);
+    });
+  });
+
+  describe('non-finite input hardening (freeze-on-NaN regression)', () => {
+    it('pan(NaN) is a no-op and leaves visibleStart finite', () => {
+      const vs = new ChartViewState(500, 40);
+      const before = vs.getState().visibleStart;
+      vs.pan(NaN);
+      expect(Number.isFinite(vs.getState().visibleStart)).toBe(true);
+      expect(vs.getState().visibleStart).toBe(before);
+      // And a subsequent real pan still works (state was not poisoned).
+      vs.pan(-5);
+      expect(vs.getState().visibleStart).toBe(before - 5);
+    });
+
+    it('zoom with a NaN anchor keeps state finite and pannable', () => {
+      const vs = new ChartViewState(500, 40);
+      vs.zoom(0.5, NaN);
+      expect(Number.isFinite(vs.getState().visibleStart)).toBe(true);
+      expect(Number.isFinite(vs.getState().visibleCount)).toBe(true);
+      const before = vs.getState().visibleStart;
+      vs.pan(-3);
+      expect(vs.getState().visibleStart).toBe(before - 3);
+    });
+
+    it('setVisibleCount(NaN) falls back to a finite count', () => {
+      const vs = new ChartViewState(500, 40);
+      vs.setVisibleCount(NaN);
+      expect(Number.isFinite(vs.getState().visibleCount)).toBe(true);
+      expect(vs.getState().visibleCount).toBeGreaterThanOrEqual(MIN_VISIBLE_BARS);
+    });
+  });
+
+  describe('zoom stays pinned to the tail while followLatest (pan-freeze regression)', () => {
+    it('keeps visibleStart at the tail after zoom-in when followLatest, so pan can escape follow', () => {
+      const vs = new ChartViewState(2000, 100);
+      vs.resetToLatest(); // followLatest=true, as a linked view-switch restore does
+
+      // Zoom in repeatedly with a left-of-center cursor anchor.
+      for (let i = 0; i < 30; i++) {
+        const s = vs.getState();
+        vs.zoom(0.9, s.visibleStart + Math.floor(s.visibleCount * 0.7));
+      }
+
+      const s = vs.getState();
+      // Invariant: while followLatest, visibleStart must equal the tail (never drift).
+      expect(s.followLatest).toBe(true);
+      expect(s.visibleStart).toBe(2000 - s.visibleCount);
+      expect(vs.isAtTail()).toBe(true);
+
+      // Panning left must now actually move AND drop followLatest (was frozen before).
+      vs.pan(-3);
+      const after = vs.getState();
+      expect(after.followLatest).toBe(false);
+      expect(after.visibleStart).toBe(s.visibleStart - 3);
+    });
+
+    it('still anchors to the cursor when NOT following latest', () => {
+      const vs = new ChartViewState(2000, 100);
+      vs.pan(-500); // move off the tail -> followLatest=false
+      expect(vs.getFollowLatest()).toBe(false);
+      const before = vs.getState();
+      vs.zoom(0.5, before.visibleStart + 50);
+      // Anchor-preserving zoom keeps the cursor bar roughly in place (not pinned to tail).
+      expect(vs.getState().visibleStart).not.toBe(2000 - vs.getState().visibleCount);
     });
   });
 });

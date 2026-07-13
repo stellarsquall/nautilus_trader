@@ -372,6 +372,10 @@ the late-joiner test (E) are confirmed, the terminal is verified end-to-end.
 - Verified by: user + assistant (paired)   Date: 2026-07-12   Browser / OS: Chrome / macOS
 - Linked-viewport checks: Z1 ☑ Z2 ☑ Z3 ☑ Z4 ☑ Z5 ☑ Z6 ☑ Z7 ☑ Z8 ☑ Z9 ☑ Z10 ☑ Z11 ☑ Z12 ☑
 
+**Slice 12 (footprint vertical pan) sign-off:**
+- Verified by: user + assistant (paired)   Date: 2026-07-13   Browser / OS: Chrome / macOS
+- Vertical-pan checks: VP1 ☑ VP2 ☑ VP3 ☑ VP4 ☑ VP5 ☑ VP6 ☑ VP7 ☑
+
 ---
 
 ## 3g. Slice 11 — Linked Viewport Persistence Verification
@@ -473,6 +477,39 @@ horizontal-scroll pan, pinch + two-finger-vertical smooth cursor-anchored zoom, 
 capped at available bars (fills width, no empty-left padding), right-anchored viewport
 (newest bar at right edge), crosshair + OHLC readout, auto-follow with Latest reset, and
 visible-window autoscale all confirmed. Client-only — server and `/ws` protocol untouched.
+
+---
+
+## 3h. Slice 12 — Footprint Vertical Pan Verification
+
+This slice adds **vertical pan/scroll of the footprint price ladder** (TradingView-style): a
+continuous price grid + axis that fills the whole canvas, drag/wheel/double-click controls, a
+**Latest** button, and a render fix so the newest columns always stay on screen. All behavior is
+**pure client** under `terminal/client/` (plus two small Overview fixes surfaced during this slice).
+
+| # | Action | Expected | Pass? |
+|---|--------|----------|-------|
+| VP1 | Footprint view, tall price range (taller than the canvas) | Drag up/down or **mouse-wheel** scrolls the ladder; previously-clipped price levels are reachable both ways | ☑ |
+| VP2 | While scrolling, watch the header + price axis | The **grid + price axis fill the entire canvas** (continuous, even in empty space); you can scroll far past the traded range; the header row + column time labels stay fixed | ☑ |
+| VP3 | Range that FITS the canvas | Ladder stays **auto-centered** (default) until you pan | ☑ |
+| VP4 | **Double-click** the footprint grid | Snaps back to **auto-centered** | ☑ |
+| VP5 | Switch Overview↔Footprint (vertical scrolled) | Vertical position **persists** per view across switches (clamped, never crashes) | ☑ |
+| VP6 | Two-finger **horizontal** trackpad swipe on the footprint | Pans through time (matches the Overview) | ☑ |
+| VP7 | With many bars (>~1 screen), click **Latest** | Footprint shows the **newest bar at the right edge** (renders the rightmost columns that fit, not the oldest) | ☑ |
+
+> Mechanism: `FootprintViewState` gains a pixel `verticalOffset` + `verticalAutoCenter` flag +
+> `panVertical`/`resetVertical`/clamp (far-scroll bounds). `FootprintView.drawFootprintGrid` renders a
+> **continuous grid by absolute row index** across the viewport, subtracts the offset from every y
+> (clipped so scrolled rows never paint the header), and renders the **rightmost columns that fit**
+> so the newest bar stays on screen. `FootprintInteractionController` adds vertical drag + wheel +
+> dblclick-reset. `ViewportState` carries optional vertical fields (Overview ignores them).
+> Protocol stays **v:1** — core engine and server untouched.
+
+**Known issue (deferred to a future pan/link-sync slice):** the Overview occasionally **resets to
+latest when switching back from the Footprint** (the linked restore trusts the outgoing view's
+follow-latest flag; the footprint's follow-latest tracking is currently reverted). Also, footprint
+horizontal **drag speed is ~3× fast** (drag uses `barWidth = width / visibleCount` while columns render
+at a fixed width). Both are recorded for the dedicated panning/link-sync slice.
 
 ---
 

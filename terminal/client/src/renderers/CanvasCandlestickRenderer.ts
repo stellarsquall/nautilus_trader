@@ -608,6 +608,7 @@ export class CanvasCandlestickRenderer implements Renderer {
     }
 
     this.updateVisibleRange();
+    this.resetButton.updateVisibility(); // restore may land off-latest -> refresh 'Latest' button
     this.scheduleRedraw();
   }
 

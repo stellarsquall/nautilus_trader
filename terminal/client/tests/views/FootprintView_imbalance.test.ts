@@ -30,6 +30,8 @@ function createMockCtx(): CanvasRenderingContext2D {
       strokeRectRecords.push({ x, y, w, h, strokeStyle: ctx.strokeStyle as string });
     }),
     beginPath: vi.fn(),
+    rect: vi.fn(),
+    clip: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
     stroke: vi.fn(),
@@ -261,8 +263,8 @@ describe('FootprintView imbalance', () => {
       const toggleBtn = Array.from(buttons).find((b) => b.textContent?.includes('Imbalance'));
       expect(toggleBtn).toBeDefined();
       expect(toggleBtn!.textContent).toContain('ON');
-      // Two buttons: imbalance toggle and legend toggle
-      expect(buttons.length).toBe(2);
+      // Three buttons: imbalance toggle, Latest, and legend toggle.
+      expect(buttons.length).toBe(3);
     });
 
     it('should NOT create an imbalance toggle button for OverviewView', () => {

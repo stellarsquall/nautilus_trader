@@ -13,6 +13,14 @@ export interface ViewportState {
    *  Overview and Footprint operate at different zoom scales). Optional for
    *  backward-compat with states that only carried position. */
   visibleCount?: number;
+  /** Footprint vertical scroll offset in pixels (how far the price ladder is
+   *  scrolled). Restored PER-VIEW; ignored by Overview (which auto-scales price).
+   *  Optional for backward-compat with states that predate vertical pan. */
+  verticalOffset?: number;
+  /** Footprint vertical auto-center flag. When true the ladder is centered
+   *  automatically (default); once the user pans/wheels it flips false and
+   *  `verticalOffset` is honored. Optional / footprint-only. */
+  verticalAutoCenter?: boolean;
 }
 
 export interface ChartView {

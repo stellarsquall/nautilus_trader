@@ -178,6 +178,20 @@ describe('OverviewView <-> CanvasCandlestickRenderer viewport delegation (confli
     expect(state.followLatest).toBe(true);
   });
 
+  it('restoreViewportState to a historical anchor refreshes the Latest button visibility (regression: button vanished on view switch)', () => {
+    const overview = new OverviewView();
+    overview.mount(container);
+    const bars = makeBars(2000);
+    overview.seed(makeState(bars));
+    mockResetButton.updateVisibility.mockClear();
+
+    overview.restoreViewportState({ anchorTsEvent: bars[295].ts_event, followLatest: false });
+
+    // The renderer must re-evaluate the 'Latest' button after repositioning,
+    // otherwise it stays hidden even though the view is off-latest.
+    expect(mockResetButton.updateVisibility).toHaveBeenCalled();
+  });
+
   it('OverviewView getViewportState reflects followLatest after a historical restore (AC-2/AC-3)', () => {
     const overview = new OverviewView();
     overview.mount(container);

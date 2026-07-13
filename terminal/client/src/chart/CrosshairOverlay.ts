@@ -321,10 +321,11 @@ export class CrosshairOverlay {
       }
     }
 
-    // Sit to the right of the delta/VP toggle buttons (top-left, ending ~108px)
-    // so the hover readout no longer overlaps them.
-    const boxX = 116;
-    const boxY = 10;
+    // Sit to the RIGHT of the top-left button column (buttons moved to left:64 in
+    // slice 11; the widest, e.g. "Color: Delta" / "Legend: OFF", ends ~158px), so
+    // the hover readout no longer overlaps them.
+    const boxX = 168;
+    const boxY = 32; // align the readout top with the first button (Color, top:32px)
     const boxWidth = maxWidth + padding * 2;
     const boxHeight = lines.length * lineHeight + padding * 2;
 
