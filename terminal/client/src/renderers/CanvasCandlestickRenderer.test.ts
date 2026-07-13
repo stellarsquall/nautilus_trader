@@ -1248,6 +1248,7 @@ describe('CanvasCandlestickRenderer', () => {
         onNewBar: vi.fn(),
         setTotalBars: vi.fn(),
         resetToLatest: vi.fn(),
+        setFollowLatest: vi.fn(),
       }));
 
       const renderer = new CanvasCandlestickRenderer(container);
@@ -1279,6 +1280,7 @@ describe('CanvasCandlestickRenderer', () => {
         onNewBar: vi.fn(),
         setTotalBars: vi.fn(),
         resetToLatest: vi.fn(),
+        setFollowLatest: vi.fn(),
       }));
 
       const renderer = new CanvasCandlestickRenderer(container);
@@ -1311,6 +1313,7 @@ describe('CanvasCandlestickRenderer', () => {
         onNewBar: vi.fn(),
         setTotalBars: vi.fn(),
         resetToLatest: vi.fn(),
+        setFollowLatest: vi.fn(),
       }));
 
       const renderer = new CanvasCandlestickRenderer(container);

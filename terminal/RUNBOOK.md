@@ -513,6 +513,74 @@ at a fixed width). Both are recorded for the dedicated panning/link-sync slice.
 
 ---
 
+## 3i. Slice 12-fix — Panning / Link-Sync Cleanup Verification
+
+This slice **corrected two follow-ups from slice 12**, found via reproduction tests (written
+before any fix, per the standing process rule) rather than live-patching:
+
+- **Correction to a claim in 3h:** the "drag ~3× too fast" note above was **wrong** — `getBarWidth()`
+  already clamps to `MIN_COLUMN_WIDTH` (60px), so drag was already close to 1:1 with the rendered
+  column width. No fix was needed there.
+- **Bug A (real, verified): the footprint silently stopped tracking latest once total bars exceeded
+  the visible window.** `updateBar()` only called `setTotalBars` (clamps `visibleStart`, never
+  advances it), so once live streaming pushed total bars past the window, the footprint's position
+  froze at the old edge while `getFollowLatest()` kept dishonestly reporting `true`. This is the
+  actual root cause of both **"footprint stuck behind the Overview's time"** and **"Overview
+  incorrectly reset to latest on switch"** — the linked restore trusts that flag verbatim. Fixed
+  by adding `FootprintViewState.onNewBar()` (mirrors `ChartViewState.onNewBar`): advances the tail
+  only while `followLatest` was already true AND the view was already at the tail; otherwise just
+  clamps, exactly as before.
+- **Bug B (real, verified): panning could never reach the oldest bars.** The footprint's window
+  (`visibleCount`, historically a fixed 100) was wider than what the fixed-60px columns can display
+  (~32 typically), and only the *rightmost* fitting columns were ever rendered — so the leftmost
+  portion of the window was permanently undisplayable, capping how far back you could scroll. Fixed
+  by making `visibleCount` **canvas-fit-derived** (`syncVisibleCountToFit()`, called on mount/resize/
+  restore) so the window always equals what's displayed; the old render-only rightmost-slice logic
+  is kept only as a defensive fallback for the rare case the `MIN_VISIBLE_BARS` floor exceeds fit.
+
+| # | Action | Expected | Pass? |
+|---|--------|----------|-------|
+| PF1 | Footprint view, let many bars stream in past the initial window (or reload after the feed has run a while) | Footprint's newest column always matches the Overview's newest bar — no more falling behind | ☑ |
+| PF2 | Footprint view, drag/pan fully into history | You can reach and see the **very oldest bar**, not just partway into the window | ☑ |
+| PF3 | Pan the footprint away from latest, switch to Overview with Link on | Overview lands on the **footprint's panned time**, not latest | ☑ |
+| PF4 | Let the footprint sit at latest (untouched) for a while streaming bars, then switch to Overview with Link on | Overview lands on **true latest** (matches, no stale jump) | ☑ |
+| PF5 | Resize the browser window while on the footprint | The visible bar count adjusts to the new width; still fully pannable | ☑ |
+| PF6 | **Zoom + pan the Overview** away from latest, switch to Footprint (untouched), switch **back** to Overview | Overview stays at the **zoomed/panned historical position** — does NOT snap to latest | ☑ |
+
+> Reproduction-first: 3 test files (`FootprintViewState_followLatest_bug.test.ts`,
+> `FootprintView_panreach.test.ts`, `ViewManager_footprint_honest_followLatest.test.ts`) were
+> written and confirmed **failing against the pre-fix code** before any implementation change,
+> per the standing process rule from the slice-12 debugging episodes. Realigned 1 pre-existing
+> test (`FootprintView_FootprintViewState_viewport_clamp_integration.test.ts`) whose bare
+> `document.createElement('div')` container (0 width) silently relied on the old fixed-100
+> default; given a real container width so its window is still 100 as originally intended — same
+> assertions, not weakened.
+>
+> **PF6 (found via a user-supplied screen recording, not a static guess):** zooming + panning the
+> Overview away from latest, switching to Footprint, then switching back caused the Overview to
+> snap to latest — a *different* bug from PF1–PF5, living in
+> `CanvasCandlestickRenderer.restoreViewportState()`. It restores the saved zoom
+> (`setVisibleCount`) before checking `followLatest`; `setVisibleCount` never repositions or
+> touches `followLatest`, so a freshly-constructed view (which defaults `followLatest=true`,
+> positioned at the tail) can be silently knocked off-tail without correcting the flag. The
+> subsequent `pan()` call only corrects `followLatest` on a detected tail-boundary **transition**
+> — since the state was already (dishonestly) off-tail beforehand, no transition is seen and the
+> stale `followLatest=true` survives; the render loop always draws the true tail whenever that
+> flag is true, regardless of `visibleStart`. Fixed by explicitly setting `followLatest=false` in
+> the anchor-restore branch instead of relying on `pan()`'s implicit detection (mirrors
+> `FootprintViewState.setRightEdgeBarIndex`, which already recomputes `followLatest`
+> unconditionally and was unaffected). Found by reproducing the video with the real
+> `ChartViewState`/`ViewManager`/`CanvasCandlestickRenderer` classes, confirmed failing before the
+> fix and passing after — per the standing "reproduce before diagnosing" rule.
+>
+> **Pure-client.** Protocol stays **v:1**; core/server untouched.
+
+**Slice 12-fix sign-off:** all of PF1–PF6 confirmed working in Chrome (macOS), including the
+user-reported video reproduction (zoom+pan Overview → Footprint → back, no longer snaps to
+latest). tsc 0, vitest 965/57, build green, isolation gates clean (core 0, server 0).
+
+---
+
 ### Slice 2 sign-off (recorded)
 
 When all checks (A–H) and late-joiner test (E) are confirmed, slice 2 is fully verified

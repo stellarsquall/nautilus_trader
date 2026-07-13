@@ -65,6 +65,21 @@ function makeState(bars: BarPayload[]): ChartStoreState {
   return { bars, cvd: new Map(), footprints: new Map() };
 }
 
+/** A container sized so the fit-derived visibleCount is exactly 100
+ *  (floor((width-PRICE_AXIS_WIDTH)/MIN_COLUMN_WIDTH) === 100), matching this
+ *  file's pre-slice-12-fix assumption that the footprint's window is a fixed
+ *  100 bars. Since slice 12-fix, visibleCount is derived from canvas width
+ *  (fixed-width columns, no free zoom), so tests must give it a real width. */
+function makeContainer(width = 6060, height = 600): HTMLElement {
+  const c = document.createElement('div');
+  Object.defineProperty(c, 'clientWidth', { value: width, configurable: true });
+  Object.defineProperty(c, 'clientHeight', { value: height, configurable: true });
+  c.getBoundingClientRect = () => ({
+    left: 0, top: 0, right: width, bottom: height, width, height, x: 0, y: 0, toJSON: () => ({}),
+  }) as DOMRect;
+  return c;
+}
+
 describe('FootprintView.restoreViewportState binarySearchClosest (conflict area: e32ecd retained)', () => {
   // Use > DEFAULT_VISIBLE_BARS (100) so the visible window can actually scroll.
   const BARS = 300;
@@ -73,7 +88,7 @@ describe('FootprintView.restoreViewportState binarySearchClosest (conflict area:
 
   it('snaps an exact-bar anchor to that bar (right edge == requested index)', () => {
     const view = new FootprintView();
-    view.mount(document.createElement('div'));
+    view.mount(makeContainer());
     const bars = createBars(BARS);
     view.seed(makeState(bars));
 
@@ -87,7 +102,7 @@ describe('FootprintView.restoreViewportState binarySearchClosest (conflict area:
 
   it('snaps an off-grid anchor to the closer of two surrounding bars', () => {
     const view = new FootprintView();
-    view.mount(document.createElement('div'));
+    view.mount(makeContainer());
     const bars = createBars(BARS);
     view.seed(makeState(bars));
 
@@ -101,7 +116,7 @@ describe('FootprintView.restoreViewportState binarySearchClosest (conflict area:
 
   it('clamps an out-of-range low anchor to the oldest reachable window', () => {
     const view = new FootprintView();
-    view.mount(document.createElement('div'));
+    view.mount(makeContainer());
     const bars = createBars(BARS);
     view.seed(makeState(bars));
 
@@ -114,7 +129,7 @@ describe('FootprintView.restoreViewportState binarySearchClosest (conflict area:
 
   it('clamps an out-of-range high anchor to the newest bar', () => {
     const view = new FootprintView();
-    view.mount(document.createElement('div'));
+    view.mount(makeContainer());
     const bars = createBars(BARS);
     view.seed(makeState(bars));
 
@@ -125,7 +140,7 @@ describe('FootprintView.restoreViewportState binarySearchClosest (conflict area:
 
   it('followLatest=true overrides the anchor and restores to the latest bar', () => {
     const view = new FootprintView();
-    view.mount(document.createElement('div'));
+    view.mount(makeContainer());
     const bars = createBars(BARS);
     view.seed(makeState(bars));
 
@@ -170,7 +185,7 @@ describe('FootprintViewState retained-variant right-edge accessors (conflict are
 
   it('full round-trip through FootprintView delegates to FootprintViewState', () => {
     const view = new FootprintView();
-    view.mount(document.createElement('div'));
+    view.mount(makeContainer());
     const bars = createBars(300);
     view.seed(makeState(bars));
 
@@ -188,7 +203,7 @@ describe('FootprintViewState retained-variant right-edge accessors (conflict are
 describe('FootprintView ViewportState contract shape', () => {
   it('exposes getViewportState/restoreViewportState and a well-formed ViewportState', () => {
     const view = new FootprintView();
-    view.mount(document.createElement('div'));
+    view.mount(makeContainer());
     const state = view.getViewportState();
     expect(typeof state.anchorTsEvent === 'number' || state.anchorTsEvent === null).toBe(true);
     expect(typeof state.followLatest).toBe('boolean');

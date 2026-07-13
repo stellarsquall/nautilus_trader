@@ -212,7 +212,7 @@ export class FootprintView implements ChartView {
       }
     }
 
-    this._viewState.setTotalBars(this.bars.length);
+    this._viewState.onNewBar(this.bars.length);
     this.draw();
   }
 
@@ -290,7 +290,14 @@ export class FootprintView implements ChartView {
   }
 
   restoreViewportState(state: ViewportState): void {
-    if (state.visibleCount !== undefined) {
+    // The footprint's visibleCount is a canvas-fit derivative, not a persisted
+    // user zoom (fixed-width columns, no free zoom) -- always resync to what
+    // actually fits the current canvas rather than trust a stored/shared value
+    // (which may come from the Overview's very different zoom scale, or from a
+    // stale width if the container was resized while this view was hidden).
+    if (this.canvas) {
+      this.syncVisibleCountToFit(this.canvas.width / this.currentDPR);
+    } else if (state.visibleCount !== undefined) {
       this._viewState.setVisibleCount(state.visibleCount);
     }
     if (state.followLatest) {
@@ -385,6 +392,22 @@ export class FootprintView implements ChartView {
     this.canvas.height = height * dpr;
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${height}px`;
+
+    this.syncVisibleCountToFit(width);
+  }
+
+  /** The footprint uses FIXED-width columns, so the number of bars that fit is
+   *  determined by canvas width, not a free-zoom setting. Keep visibleCount in
+   *  sync with what actually fits so the window and the display always match
+   *  1:1 -- otherwise panning cannot reach bars that fall in the undisplayed
+   *  part of an oversized window (see slice 12-fix Bug B). */
+  private syncVisibleCountToFit(cssWidth: number): void {
+    const maxColumns = Math.floor(
+      (cssWidth - FootprintView.PRICE_AXIS_WIDTH) / FootprintView.MIN_COLUMN_WIDTH,
+    );
+    if (maxColumns > 0) {
+      this._viewState.setVisibleCount(maxColumns);
+    }
   }
 
   private draw(): void {
@@ -405,10 +428,10 @@ export class FootprintView implements ChartView {
 
     if (visibleBars.length === 0) return;
 
-    // The footprint uses FIXED-width columns (MIN_COLUMN_WIDTH), so only so many
-    // fit the canvas. If the window holds more bars than fit, render the RIGHTMOST
-    // (newest) ones -- otherwise the left-anchored grid would paint the oldest
-    // columns and push the latest bars off-screen to the right.
+    // Defensive fallback: visibleCount is normally kept in sync with what fits
+    // via syncVisibleCountToFit(), but the MIN_VISIBLE_BARS floor (20) can still
+    // exceed what a very narrow canvas can render. If so, render the RIGHTMOST
+    // (newest) columns that fit so the newest bars stay visible.
     const maxColumns = Math.floor(
       (width - FootprintView.PRICE_AXIS_WIDTH) / FootprintView.MIN_COLUMN_WIDTH,
     );

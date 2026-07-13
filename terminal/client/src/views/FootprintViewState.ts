@@ -41,6 +41,24 @@ export class FootprintViewState {
     this.visibleStart = this.clampVisibleStart(this.visibleStart);
   }
 
+  /** Update totalBars for a NEW bar arriving (live streaming). Unlike
+   *  setTotalBars, this advances the window's tail to keep the newest bar
+   *  visible while followLatest is true and the view was already at the tail
+   *  -- mirrors ChartViewState.onNewBar. Without this, a footprint that starts
+   *  at latest silently freezes (visibleStart never advances) once totalBars
+   *  grows past visibleCount, while getFollowLatest() keeps dishonestly
+   *  reporting true. */
+  public onNewBar(newTotalBars: number): void {
+    const wasAtLatest = this.isAtLatest();
+    this.totalBars = Math.max(0, newTotalBars);
+
+    if (this.followLatest && wasAtLatest) {
+      this.visibleStart = Math.max(0, this.totalBars - this.visibleCount);
+    } else {
+      this.visibleStart = this.clampVisibleStart(this.visibleStart);
+    }
+  }
+
   public pan(deltaBars: number): void {
     const wasAtLatest = this.isAtLatest();
 

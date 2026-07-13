@@ -605,6 +605,19 @@ export class CanvasCandlestickRenderer implements Renderer {
       const currentState = this.viewState.getState();
       const delta = targetVisibleStart - currentState.visibleStart;
       this.viewState.pan(delta);
+      // pan() only toggles followLatest on a wasAtTail->nowAtTail TRANSITION.
+      // setVisibleCount() above can silently take an already-followLatest=true
+      // state off the tail without touching the flag (it never repositions),
+      // so if this restore already started off-tail, pan() sees no transition
+      // and leaves a STALE followLatest=true -- updateVisibleRange() then
+      // renders the true tail regardless of visibleStart (it ignores
+      // visibleStart whenever followLatest is true), so the view visually
+      // snaps back to latest even though visibleStart correctly moved.
+      // We already know the intended state explicitly (state.followLatest is
+      // false in this branch) -- set it directly rather than trust pan()'s
+      // implicit recomputation, mirroring FootprintViewState.setRightEdgeBarIndex
+      // which recomputes followLatest unconditionally from isAtLatest().
+      this.viewState.setFollowLatest(false);
     }
 
     this.updateVisibleRange();
